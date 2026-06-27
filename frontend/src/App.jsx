@@ -8,12 +8,18 @@ const THEME = '#7c3aed'
 const THEME_DARK = '#4c1d95'
 
 const MAP_STYLES = [
-  { featureType: 'all', elementType: 'geometry', stylers: [{ saturation: -30 }, { lightness: 5 }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#b3cde8' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f8f8f8' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#efefef' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#d5eacc' }] },
-  { featureType: 'transit.station', elementType: 'labels.icon', stylers: [{ saturation: -50 }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f5f0ff' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#7ecbf5' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#2a7ab5' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffd6e0' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#ffaac4' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#fff0f5' }] },
+  { featureType: 'road.local', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#b8f0d0' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#2e7d52' }] },
+  { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: 20 }, { lightness: 10 }] },
+  { featureType: 'transit.station', elementType: 'geometry', stylers: [{ color: '#ffe0f5' }] },
+  { featureType: 'transit.line', elementType: 'geometry', stylers: [{ color: '#d4aaff' }] },
 ]
 
 // 聖地ピン用 SVG（紫の星マーク）
