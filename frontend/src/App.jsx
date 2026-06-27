@@ -398,7 +398,7 @@ function App() {
               position={{ lat: t.lat, lng: t.lng }}
               title={t.name}
               icon={{
-                path: google.maps.SymbolPath.CIRCLE,
+                path: 0,
                 fillColor: '#f97316',
                 fillOpacity: 0.9,
                 strokeColor: '#fff',
