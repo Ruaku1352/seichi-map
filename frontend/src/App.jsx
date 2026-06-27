@@ -75,17 +75,26 @@ function Route({ spots, onPathReady }) {
   return null
 }
 
+// フロントサイドキャッシュ（spot_id -> intro text）
+const introCache = {}
+
 function Card({ spot, onClose }) {
-  const [intro, setIntro] = useState(spot.intro_short_en)
-  const [loading, setLoading] = useState(true)
+  const [intro, setIntro] = useState(introCache[spot.id] || spot.intro_short_en)
+  const [loading, setLoading] = useState(!introCache[spot.id])
 
   useEffect(() => {
+    if (introCache[spot.id]) {
+      setIntro(introCache[spot.id])
+      setLoading(false)
+      return
+    }
     setIntro(spot.intro_short_en)
     setLoading(true)
     fetch(`${BACKEND_URL}/generate-intro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: spot.id,
         spot_name_en: spot.spot_name_en,
         anime_title_en: spot.anime_title_en,
         scene_description: spot.scene_description,
@@ -93,7 +102,12 @@ function Card({ spot, onClose }) {
       }),
     })
       .then(r => r.json())
-      .then(data => { if (data.intro) setIntro(data.intro) })
+      .then(data => {
+        if (data.intro) {
+          introCache[spot.id] = data.intro
+          setIntro(data.intro)
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [spot.id])
@@ -186,7 +200,26 @@ function App() {
   useEffect(() => {
     fetch('/seichi_data.json')
       .then(r => r.json())
-      .then(setSpots)
+      .then(data => {
+        setSpots(data)
+        // 全聖地ぶんの紹介文を起動時に一括生成
+        fetch(`${BACKEND_URL}/prefetch-intros`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data.map(s => ({
+            id: s.id,
+            spot_name_en: s.spot_name_en,
+            anime_title_en: s.anime_title_en,
+            scene_description: s.scene_description,
+            area: s.area,
+          }))),
+        })
+          .then(r => r.json())
+          .then(res => {
+            if (res.intros) Object.assign(introCache, res.intros)
+          })
+          .catch(() => {})
+      })
   }, [])
 
   // Animation loop
