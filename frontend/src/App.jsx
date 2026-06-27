@@ -3,7 +3,7 @@ import { APIProvider, Map, Marker, useMap } from '@vis.gl/react-google-maps'
 
 const TOKYO = { lat: 35.6762, lng: 139.6503 }
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
-const PROXIMITY_METERS = 10000
+const PROXIMITY_METERS = 3000
 const THEME = '#7c3aed'
 const THEME_DARK = '#4c1d95'
 
@@ -390,6 +390,17 @@ function App() {
   // Proximity trigger: auto-show card when demo marker nears a spot
   useEffect(() => {
     if (!demoPos || !spots.length) return
+
+    // 表示中のカードが範囲外に出たら閉じる
+    setSelected(prev => {
+      if (prev && haversine(demoPos, { lat: prev.lat, lng: prev.lng }) > PROXIMITY_METERS) {
+        triggeredRef.current.delete(prev.id)
+        return null
+      }
+      return prev
+    })
+
+    // 新しい聖地に近づいたらカードを出す
     for (const spot of spots) {
       if (
         haversine(demoPos, { lat: spot.lat, lng: spot.lng }) < PROXIMITY_METERS &&
