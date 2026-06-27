@@ -247,7 +247,7 @@ function TouristPopup({ spot, onClose }) {
   )
 }
 
-function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset, progress, hasPath, speedMs, setSpeedMs }) {
+function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset, onScrub, progress, hasPath, speedMs, setSpeedMs }) {
   return (
     <div style={{
       position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
@@ -308,6 +308,11 @@ function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset
               background: '#7c3aed', borderRadius: 3, transition: 'width 0.1s linear',
             }} />
           </div>
+          <input
+            type="range" min={0} max={1000} value={Math.round(progress * 1000)}
+            onChange={e => onScrub(e.target.value / 1000)}
+            style={{ width: 80, accentColor: '#7c3aed', cursor: 'pointer' }}
+          />
         </>
       )}
     </div>
@@ -404,6 +409,13 @@ function App() {
     setSelected(null)
   }
 
+  const handleScrub = (val) => {
+    setPlaying(false)
+    setDemoProgress(val)
+    triggeredRef.current.clear()
+    setSelected(null)
+  }
+
   // Real GPS hook point — swap demoPos for navigator.geolocation position when demoMode is false
   // const livePos = useLiveGPS(!demoMode)
 
@@ -469,6 +481,7 @@ function App() {
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onReset={handleReset}
+        onScrub={handleScrub}
         progress={demoProgress}
         hasPath={routePath.length > 0}
         speedMs={speedMs}
