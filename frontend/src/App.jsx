@@ -122,8 +122,9 @@ function Card({ spot, onClose }) {
 
   return (
     <div style={{
-      position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)',
-      background: 'white', borderRadius: 12, padding: '16px 20px', width: 320,
+      position: 'absolute', bottom: 16, left: 12, right: 12,
+      maxWidth: 360, margin: '0 auto',
+      background: 'white', borderRadius: 12, padding: '16px 20px',
       boxShadow: '0 4px 16px rgba(0,0,0,0.2)', zIndex: 10,
     }}>
       <button onClick={onClose} style={{
@@ -154,10 +155,11 @@ function Card({ spot, onClose }) {
 function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset, progress, hasPath }) {
   return (
     <div style={{
-      position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-      background: 'rgba(255,255,255,0.95)', borderRadius: 24, padding: '8px 18px',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.18)', display: 'flex', gap: 10,
+      position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(255,255,255,0.95)', borderRadius: 24, padding: '8px 14px',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.18)', display: 'flex', gap: 8,
       alignItems: 'center', zIndex: 10, userSelect: 'none',
+      maxWidth: 'calc(100vw - 32px)',
     }}>
       <button
         onClick={() => setDemoMode(m => !m)}
