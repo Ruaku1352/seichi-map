@@ -23,7 +23,7 @@ const SPOT_ICON = {
   fillOpacity: 1,
   strokeColor: '#fff',
   strokeWeight: 1.5,
-  scale: 1.6,
+  scale: 1.0,
   anchor: { x: 12, y: 12 },
 }
 
