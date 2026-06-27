@@ -1,79 +1,130 @@
 # プロジェクト構成まとめ
 
+## このアプリの言語・技術の全体像
+
+```
+ブラウザ（スマホ・PC）
+  └── JavaScript (React)   ← 画面に見えるものはすべてこれ
+        │
+        │ API呼び出し（HTTP通信）
+        ▼
+サーバー（Render というクラウド）
+  └── Python (FastAPI)     ← AI連携・データ処理はこれ
+        │
+        │ API呼び出し
+        ▼
+Anthropic API（Claude）    ← 英語紹介文を生成する AI
+```
+
+| 場所 | 言語 | 役割 |
+|---|---|---|
+| フロント（画面） | JavaScript（React + Vite） | 地図・ピン・ルート・カード・デモ再生の表示 |
+| バックエンド（サーバー） | Python（FastAPI） | Anthropic API を呼んで紹介文を生成・返す |
+| データ | JSON | 聖地の座標・名前・説明などを保存 |
+
+---
+
 ## ルート直下
 
-| ファイル/フォルダ | 役割 |
-|---|---|
-| `CLAUDE.md` | プロジェクト仕様書。スタック・役割分担・MVPの定義 |
-| `STRUCTURE.md` | このファイル。構成の説明 |
-| `PROGRESS.md` | 開発進捗メモ |
-| `SETUP.md` | ローカル起動手順 |
-| `seichi_data.json` | マスターデータ（聖地一覧）。フロントの `public/` にもコピーがある |
-| `.gitignore` | Git 管理外ファイルの設定（`.env`・`node_modules`・`dist` など） |
-| `frontend/` | React フロントエンド（Vercel にデプロイ） |
-| `backend/` | Python バックエンド（Render にデプロイ） |
+```
+seichi-map/
+├── frontend/          ← フロント（JavaScript）の全ファイル
+├── backend/           ← バックエンド（Python）の全ファイル
+├── seichi_data.json   ← 聖地データ（マスター）
+├── CLAUDE.md          ← プロジェクト仕様書
+├── STRUCTURE.md       ← このファイル
+├── PROGRESS.md        ← 開発進捗メモ
+├── SETUP.md           ← ローカル起動手順
+└── .gitignore         ← GitHub に上げないファイルのリスト（.env など）
+```
 
 ---
 
-## frontend/
+## frontend/（JavaScript・React）
 
-| ファイル/フォルダ | 役割 |
-|---|---|
-| `src/App.jsx` | アプリ本体。地図・ピン・ルート・カード・デモ再生の全ロジック |
-| `src/main.jsx` | エントリーポイント。`App.jsx` を HTML に差し込む |
-| `src/index.css` | グローバルスタイル（最小限） |
-| `src/App.css` | App コンポーネント用スタイル（ほぼ未使用） |
-| `src/assets/` | 静的アセット（SVG など） |
-| `public/seichi_data.json` | 聖地データ。ビルド後もそのまま配信される |
-| `index.html` | HTML テンプレート。Vite がここに JS を注入する |
-| `vite.config.js` | Vite の設定（React プラグインのみ） |
-| `package.json` | npm パッケージ定義・スクリプト定義 |
-| `.env` | ローカル用環境変数（Git 管理外） |
-| `.env.production` | 本番用環境変数（Vercel ビルド時に使用・Git 管理内） |
+**言語:** JavaScript  
+**ビルドツール:** Vite（`npm run build` でブラウザ用ファイルに変換する）  
+**デプロイ先:** Vercel（`https://seichi-map-rust.vercel.app`）
 
-### src/App.jsx の主なコンポーネント・関数
+```
+frontend/
+├── src/
+│   ├── App.jsx        ← ★ アプリの本体。ここがほぼ全て
+│   ├── main.jsx       ← エントリーポイント（起動ファイル）
+│   ├── index.css      ← 全体のスタイル（見た目）
+│   └── App.css        ← App用スタイル（ほぼ未使用）
+├── public/
+│   └── seichi_data.json  ← 聖地データ（ブラウザから直接読む）
+├── index.html         ← ベースとなるHTMLファイル
+├── vite.config.js     ← Viteの設定
+├── package.json       ← 使っているライブラリの一覧
+├── .env               ← ローカル用のAPIキー（GitHub に上がらない）
+└── .env.production    ← 本番用のAPIキー（Vercelビルド時に使用）
+```
 
-| 名前 | 種別 | 役割 |
+### App.jsx の中身
+
+| 名前 | 何者か | 役割 |
 |---|---|---|
-| `haversine` | 関数 | 2点間の距離をメートルで計算 |
-| `interpolatePath` | 関数 | ルートパス上の任意の位置（0〜1）を返す |
-| `Route` | コンポーネント | Google Maps Directions API でルートを描画し、パスを親へ渡す |
-| `Card` | コンポーネント | 聖地情報カードを表示。バックエンドを呼んでAI生成文を取得 |
-| `DemoControls` | コンポーネント | 再生/一時停止/リセット/DEMO・LIVEトグルのUI |
-| `App` | コンポーネント | 全体の状態管理。デモ再生ループ・近接判定・カード自動表示 |
+| `haversine` | 関数 | 2点間の距離をメートルで計算する |
+| `interpolatePath` | 関数 | ルート上のある時点（0〜1）の座標を返す |
+| `Route` | コンポーネント（画面部品） | Google Maps でルートを線として描く |
+| `Card` | コンポーネント | 聖地カードを表示。バックエンドを呼んでAI文章を取得する |
+| `DemoControls` | コンポーネント | ▶️⏸⏮ ボタンとDEMO/LIVEトグルのUI |
+| `App` | コンポーネント（親） | 全体の状態を管理。デモ再生・近接判定・カード表示を制御 |
 
-### 定数
+### 変更しやすい定数（App.jsx の上部）
 
-| 定数 | 値 | 意味 |
+| 定数名 | 現在の値 | 意味 |
 |---|---|---|
-| `PROXIMITY_METERS` | 120 | この距離（m）以内に近づくとカードが自動表示 |
-| `DEMO_DURATION_MS` | 30000 | デモ再生の全体時間（ミリ秒）。30秒 |
-| `BACKEND_URL` | 環境変数 | バックエンドの URL |
+| `PROXIMITY_METERS` | `120` | 何メートル以内に近づいたらカードを出すか |
+| `DEMO_DURATION_MS` | `30000` | デモ再生の長さ（ミリ秒）。30000 = 30秒 |
 
 ---
 
-## backend/
+## backend/（Python・FastAPI）
 
-| ファイル | 役割 |
-|---|---|
-| `main.py` | FastAPI アプリ本体。エンドポイントを定義 |
-| `requirements.txt` | Python パッケージ一覧 |
-| `.env` | Anthropic API キー（Git 管理外・Render の環境変数で代替） |
+**言語:** Python  
+**フレームワーク:** FastAPI（Web API を簡単に作れるライブラリ）  
+**デプロイ先:** Render（`https://seichi-map-backend.onrender.com`）
 
-### エンドポイント
+```
+backend/
+├── main.py            ← ★ サーバーの本体。APIエンドポイントを定義
+├── requirements.txt   ← 使っているPythonライブラリの一覧
+└── .env               ← Anthropic APIキー（GitHub に上がらない）
+```
 
-| メソッド | パス | 役割 |
+### APIエンドポイント（外から呼べる窓口）
+
+| 呼び方 | URL | 何をするか |
 |---|---|---|
-| `GET` | `/health` | 死活確認。`{"status":"ok"}` を返す |
-| `POST` | `/generate-intro` | 聖地情報を受け取り Anthropic API で英語紹介文を生成して返す |
+| GET | `/health` | 「サーバー生きてる？」の確認。`{"status":"ok"}` を返す |
+| POST | `/generate-intro` | 聖地情報を受け取り、Claude（AI）で英語紹介文を生成して返す |
 
 ---
 
-## デプロイ先
+## データ（seichi_data.json）
+
+**言語:** JSON（データを記述するための書き方。プログラムではない）  
+聖地1件につき1つのオブジェクトで、以下の情報を持つ：
+
+| フィールド | 例 | 意味 |
+|---|---|---|
+| `spot_name_ja/en` | 宇治橋 / Uji Bridge | 聖地の名前 |
+| `anime_title_ja/en` | 響け！ユーフォニアム | アニメのタイトル |
+| `lat` / `lng` | 34.8915 / 135.8075 | 緯度・経度（地図上の位置） |
+| `scene_description` | 主人公たちが渡る橋… | AIへの素材テキスト |
+| `intro_short_en` | PLACEHOLDER… | AI生成前のデフォルト文 |
+
+---
+
+## デプロイ先まとめ
 
 | 場所 | サービス | URL |
 |---|---|---|
 | フロント | Vercel | `https://seichi-map-rust.vercel.app` |
 | バックエンド | Render | `https://seichi-map-backend.onrender.com` |
 
-> Render の無料プランは15分放置するとスリープする。デモ前に `/health` を開いて起こすこと。
+> **注意:** Render の無料プランは15分放置するとスリープする。  
+> デモ前に `https://seichi-map-backend.onrender.com/health` を開いて起こすこと。
