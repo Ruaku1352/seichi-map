@@ -127,30 +127,56 @@ function Card({ spot, onClose }) {
   return (
     <div style={{
       position: 'absolute', bottom: 16, left: 12, right: 12,
-      maxWidth: 360, margin: '0 auto',
-      background: 'white', borderRadius: 12, padding: '16px 20px',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.2)', zIndex: 10,
+      maxWidth: 380, margin: '0 auto',
+      background: 'white', borderRadius: 20,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)',
+      zIndex: 10, overflow: 'hidden',
     }}>
-      <button onClick={onClose} style={{
-        position: 'absolute', top: 8, right: 12,
-        background: 'none', border: 'none', fontSize: 18, cursor: 'pointer',
-      }}>✕</button>
-      <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>{spot.anime_title_ja}</div>
-      <div style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>{spot.spot_name_ja}</div>
-      <div style={{ fontSize: 14, color: '#444', lineHeight: 1.6, minHeight: 60 }}>
-        {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#aaa', paddingTop: 8 }}>
-            <div style={{
-              width: 16, height: 16, border: '2px solid #e0e0e0',
-              borderTop: '2px solid #1a73e8', borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite', flexShrink: 0,
-            }} />
-            <span style={{ fontSize: 13 }}>Generating introduction…</span>
+      {/* ヘッダー帯 */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%)',
+        padding: '14px 44px 14px 18px',
+      }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600,
+          letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 4 }}>
+          {spot.anime_title_en}
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
+          {spot.spot_name_en}
+        </div>
+        {spot.area && (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
+            📍 {spot.area}
           </div>
-        ) : intro}
+        )}
       </div>
-      <div style={{ fontSize: 11, color: '#bbb', marginTop: 8, textAlign: 'right' }}>
-        {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+
+      {/* 閉じるボタン */}
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 10, right: 12,
+        background: 'rgba(255,255,255,0.2)', border: 'none',
+        color: '#fff', fontSize: 16, width: 28, height: 28,
+        borderRadius: '50%', cursor: 'pointer', lineHeight: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>✕</button>
+
+      {/* 本文 */}
+      <div style={{ padding: '14px 18px 12px' }}>
+        <div style={{ fontSize: 14, color: '#333', lineHeight: 1.7, minHeight: 56 }}>
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#aaa', paddingTop: 4 }}>
+              <div style={{
+                width: 15, height: 15, border: '2px solid #e0e0e0',
+                borderTop: '2px solid #1a73e8', borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite', flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 13 }}>Generating introduction…</span>
+            </div>
+          ) : intro}
+        </div>
+        <div style={{ fontSize: 11, color: '#bbb', marginTop: 8, textAlign: 'right' }}>
+          {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+        </div>
       </div>
     </div>
   )
