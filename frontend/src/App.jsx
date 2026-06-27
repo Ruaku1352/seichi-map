@@ -217,7 +217,13 @@ function App() {
   useEffect(() => {
     fetch('/seichi_data.json')
       .then(r => r.json())
-      .then(data => {
+      .then(raw => {
+        const data = raw.filter(s =>
+          s.id &&
+          typeof s.lat === 'number' && !isNaN(s.lat) &&
+          typeof s.lng === 'number' && !isNaN(s.lng) &&
+          s.spot_name_en && s.anime_title_en
+        )
         setSpots(data)
         // 全聖地ぶんの紹介文を起動時に一括生成
         fetch(`${BACKEND_URL}/prefetch-intros`, {
