@@ -35,16 +35,16 @@ const SPOT_ICON = {
 }
 
 const TOURIST_SPOTS = [
-  { id: 't-tsutenkaku',    name: '通天閣',       lat: 34.6524, lng: 135.5063 },
-  { id: 't-kiyomizudera', name: '清水寺',       lat: 34.9949, lng: 135.7850 },
-  { id: 't-todaiji',      name: '東大寺',       lat: 34.6888, lng: 135.8398 },
-  { id: 't-kinkakuji',    name: '金閣寺',       lat: 35.0394, lng: 135.7292 },
-  { id: 't-fushimiinari', name: '伏見稲荷大社', lat: 34.9671, lng: 135.7727 },
-  { id: 't-arashiyama',   name: '嵐山',         lat: 35.0094, lng: 135.6752 },
-  { id: 't-dotonbori',    name: '道頓堀',       lat: 34.6687, lng: 135.5013 },
-  { id: 't-narapark',     name: '奈良公園',     lat: 34.6845, lng: 135.8326 },
-  { id: 't-himeji',       name: '姫路城',       lat: 34.8394, lng: 134.6939 },
-  { id: 't-osaka-castle', name: '大阪城',       lat: 34.6873, lng: 135.5262 },
+  { id: 't-tsutenkaku',    name: '通天閣',       nameEn: 'Tsutenkaku Tower',      lat: 34.6524, lng: 135.5063 },
+  { id: 't-kiyomizudera', name: '清水寺',       nameEn: 'Kiyomizudera Temple',   lat: 34.9949, lng: 135.7850 },
+  { id: 't-todaiji',      name: '東大寺',       nameEn: 'Todaiji Temple',         lat: 34.6888, lng: 135.8398 },
+  { id: 't-kinkakuji',    name: '金閣寺',       nameEn: 'Kinkakuji Temple',       lat: 35.0394, lng: 135.7292 },
+  { id: 't-fushimiinari', name: '伏見稲荷大社', nameEn: 'Fushimi Inari Shrine',  lat: 34.9671, lng: 135.7727 },
+  { id: 't-arashiyama',   name: '嵐山',         nameEn: 'Arashiyama',             lat: 35.0094, lng: 135.6752 },
+  { id: 't-dotonbori',    name: '道頓堀',       nameEn: 'Dotonbori',              lat: 34.6687, lng: 135.5013 },
+  { id: 't-narapark',     name: '奈良公園',     nameEn: 'Nara Park',              lat: 34.6845, lng: 135.8326 },
+  { id: 't-himeji',       name: '姫路城',       nameEn: 'Himeji Castle',          lat: 34.8394, lng: 134.6939 },
+  { id: 't-osaka-castle', name: '大阪城',       nameEn: 'Osaka Castle',           lat: 34.6873, lng: 135.5262 },
 ]
 
 const DEMO_SPEEDS = [
@@ -225,6 +225,40 @@ function Card({ spot, onClose }) {
   )
 }
 
+function TouristPopup({ spot, onClose }) {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 16, left: 12, right: 12,
+      maxWidth: 380, margin: '0 auto',
+      background: 'white', borderRadius: 16,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 10, overflow: 'hidden',
+    }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+        padding: '14px 44px 14px 18px',
+      }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 600,
+          letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 4 }}>
+          Tourist Spot
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
+          {spot.name}
+        </div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4 }}>
+          {spot.nameEn}
+        </div>
+      </div>
+      <button onClick={onClose} style={{
+        position: 'absolute', top: 10, right: 12,
+        background: 'rgba(255,255,255,0.2)', border: 'none',
+        color: '#fff', fontSize: 16, width: 28, height: 28,
+        borderRadius: '50%', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>✕</button>
+    </div>
+  )
+}
+
 function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset, progress, hasPath, speedMs, setSpeedMs }) {
   return (
     <div style={{
@@ -295,6 +329,7 @@ function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset
 function App() {
   const [spots, setSpots] = useState([])
   const [selected, setSelected] = useState(null)
+  const [selectedTourist, setSelectedTourist] = useState(null)
   const [routePath, setRoutePath] = useState([])
 
   // Demo mode state
@@ -389,7 +424,7 @@ function App() {
           gestureHandling="greedy"
           disableDefaultUI={false}
           styles={MAP_STYLES}
-          onClick={() => setSelected(null)}
+          onClick={() => { setSelected(null); setSelectedTourist(null) }}
         >
           <Route spots={spots} onPathReady={setRoutePath} />
           {TOURIST_SPOTS.map(t => (
@@ -405,6 +440,7 @@ function App() {
                 strokeWeight: 2,
                 scale: 8,
               }}
+              onClick={() => { setSelectedTourist(t); setSelected(null) }}
             />
           ))}
           {spots.map(spot => (
@@ -446,6 +482,7 @@ function App() {
         setSpeedMs={setSpeedMs}
       />
       {selected && <Card spot={selected} onClose={() => setSelected(null)} />}
+      {!selected && selectedTourist && <TouristPopup spot={selectedTourist} onClose={() => setSelectedTourist(null)} />}
     </div>
   )
 }
