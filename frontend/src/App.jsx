@@ -325,6 +325,7 @@ function App() {
   const [selected, setSelected] = useState(null)
   const [selectedTourist, setSelectedTourist] = useState(null)
   const [routePath, setRoutePath] = useState([])
+  const [pulse, setPulse] = useState(false)
 
   // Demo mode state
   const [demoMode, setDemoMode] = useState(true)
@@ -413,6 +414,13 @@ function App() {
     }
   }, [demoPos, spots])
 
+  // 選択中ピンのパルスアニメーション
+  useEffect(() => {
+    if (!selected) { setPulse(false); return }
+    const id = setInterval(() => setPulse(p => !p), 500)
+    return () => clearInterval(id)
+  }, [selected])
+
   const handleReset = () => {
     setDemoProgress(0)
     setPlaying(false)
@@ -423,8 +431,7 @@ function App() {
   const handleScrub = (val) => {
     setPlaying(false)
     setDemoProgress(val)
-    triggeredRef.current.clear()
-    setSelected(null)
+    // triggeredRef はクリアしない → スクラバー操作中のチカチカを防ぐ
   }
 
   // Real GPS hook point — swap demoPos for navigator.geolocation position when demoMode is false
@@ -464,7 +471,11 @@ function App() {
               key={spot.id}
               position={{ lat: spot.lat, lng: spot.lng }}
               title={spot.spot_name_en}
-              icon={SPOT_ICON}
+              icon={selected?.id === spot.id
+                ? { ...SPOT_ICON, scale: pulse ? 1.6 : 1.1, fillColor: '#a855f7' }
+                : SPOT_ICON
+              }
+              zIndex={selected?.id === spot.id ? 100 : 1}
               onClick={() => setSelected(spot)}
             />
           ))}
