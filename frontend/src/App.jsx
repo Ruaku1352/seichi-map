@@ -337,16 +337,46 @@ function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset
 
 function useLiveGPS(enabled) {
   const [pos, setPos] = useState(TOKYO)
+  const [status, setStatus] = useState('idle') // 'idle' | 'pending' | 'ok' | 'error'
   useEffect(() => {
-    if (!enabled || !navigator.geolocation) return
+    if (!enabled) { setStatus('idle'); return }
+    if (!navigator.geolocation) { setStatus('error'); return }
+    setStatus('pending')
     const id = navigator.geolocation.watchPosition(
-      ({ coords }) => setPos({ lat: coords.latitude, lng: coords.longitude }),
-      () => setPos(TOKYO),
+      ({ coords }) => {
+        setPos({ lat: coords.latitude, lng: coords.longitude })
+        setStatus('ok')
+      },
+      () => { setPos(TOKYO); setStatus('error') },
       { enableHighAccuracy: true, maximumAge: 5000 },
     )
     return () => navigator.geolocation.clearWatch(id)
   }, [enabled])
-  return pos
+  return { pos, status }
+}
+
+function GpsWidget({ status }) {
+  const labels = {
+    idle:    null,
+    pending: { icon: '⏳', text: 'Getting location…',          color: '#888' },
+    ok:      { icon: '📍', text: 'GPS active',                 color: '#16a34a' },
+    error:   { icon: '⚠️', text: 'GPS off — using Tokyo St.', color: '#dc2626' },
+  }
+  const l = labels[status]
+  if (!l) return null
+  return (
+    <div style={{
+      position: 'absolute', bottom: 90, right: 12, zIndex: 10,
+      background: 'rgba(255,255,255,0.95)', borderRadius: 20,
+      padding: '6px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontSize: 12, fontWeight: 600, color: l.color,
+      maxWidth: 220,
+    }}>
+      <span>{l.icon}</span>
+      <span>{l.text}</span>
+    </div>
+  )
 }
 
 function App() {
@@ -364,7 +394,7 @@ function App() {
   const [speedMs, setSpeedMs] = useState(30000)
   const triggeredRef = useRef(new Set())
 
-  const livePos = useLiveGPS(!demoMode)
+  const { pos: livePos, status: gpsStatus } = useLiveGPS(!demoMode)
 
   useEffect(() => {
     fetch('/tourist_spots.json').then(r => r.json()).then(setTouristSpots).catch(() => {})
@@ -421,6 +451,17 @@ function App() {
   )
 
   const activePos = demoMode ? demoPos : livePos
+
+  // 現在地から100km以内の聖地だけルートに使う（距離順にソート）
+  const nearbySpots = useMemo(() => {
+    if (!spots.length) return []
+    return spots
+      .filter(s => haversine(livePos, { lat: s.lat, lng: s.lng }) <= 100000)
+      .sort((a, b) =>
+        haversine(livePos, { lat: a.lat, lng: a.lng }) -
+        haversine(livePos, { lat: b.lat, lng: b.lng })
+      )
+  }, [spots, livePos])
 
   // Proximity trigger: auto-show card when marker nears a spot (demo or live)
   useEffect(() => {
@@ -483,7 +524,7 @@ function App() {
           styles={MAP_STYLES}
           onClick={() => { setSelected(null); setSelectedTourist(null) }}
         >
-          <Route spots={spots} onPathReady={setRoutePath} />
+          <Route spots={nearbySpots} onPathReady={setRoutePath} />
           {touristSpots.map(t => (
             <Marker
               key={t.id}
@@ -543,6 +584,7 @@ function App() {
         speedMs={speedMs}
         setSpeedMs={setSpeedMs}
       />
+      {!demoMode && <GpsWidget status={gpsStatus} />}
       {selected && <Card spot={selected} onClose={() => setSelected(null)} />}
       {!selected && selectedTourist && <TouristPopup spot={selectedTourist} onClose={() => setSelectedTourist(null)} />}
     </div>
