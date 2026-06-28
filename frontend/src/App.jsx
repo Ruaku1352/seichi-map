@@ -509,18 +509,21 @@ function App() {
     // triggeredRef はクリアしない → スクラバー操作中のチカチカを防ぐ
   }
 
-  // Real GPS hook point — swap demoPos for navigator.geolocation position when demoMode is false
-  // const livePos = useLiveGPS(!demoMode)
-
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
         <Map
           style={{ width: '100%', height: '100%' }}
           defaultCenter={TOKYO}
-          defaultZoom={14}
+          defaultZoom={6}
+          minZoom={5}
           gestureHandling="greedy"
-          disableDefaultUI={false}
+          disableDefaultUI={true}
+          zoomControl={true}
+          restriction={{
+            latLngBounds: { north: 46.5, south: 23.0, west: 121.0, east: 155.0 },
+            strictBounds: false,
+          }}
           styles={MAP_STYLES}
           onClick={() => { setSelected(null); setSelectedTourist(null) }}
         >
