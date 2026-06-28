@@ -84,7 +84,7 @@ function Route({ spots, origin, onPathReady }) {
     if (!map || !origin || spots.length < 1) return
 
     const service = new google.maps.DirectionsService()
-    const renderer = new google.maps.DirectionsRenderer({ suppressMarkers: true })
+    const renderer = new google.maps.DirectionsRenderer({ suppressMarkers: true, preserveViewport: true })
     renderer.setMap(map)
 
     const waypoints = spots.slice(0, -1).map(s => ({
