@@ -456,7 +456,7 @@ function App() {
   const nearbySpots = useMemo(() => {
     if (!spots.length) return []
     return spots
-      .filter(s => haversine(livePos, { lat: s.lat, lng: s.lng }) <= 100000)
+      .filter(s => haversine(livePos, { lat: s.lat, lng: s.lng }) <= 50000)
       .sort((a, b) =>
         haversine(livePos, { lat: a.lat, lng: a.lng }) -
         haversine(livePos, { lat: b.lat, lng: b.lng })
