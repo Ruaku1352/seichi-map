@@ -7,8 +7,8 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 const PROXIMITY_METERS = 100
 const THEME = '#7c3aed'
 const THEME_DARK = '#4c1d95'
-const DEMO_STEP = 0.0005  // degrees per tick (≈55m)
-const DEMO_TICK_MS = 150
+const DEMO_STEP = 0.001   // degrees per tick (≈110m)
+const DEMO_TICK_MS = 600  // marker position update interval
 const ARRIVE_DEG = 0.001  // ≈110m, spot "arrived"
 
 const MAP_STYLES = [
@@ -167,15 +167,22 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
       }
       posRef.current = newPos
       onPosChange({ ...newPos })
-
-      // カメラ: マーカーを即時追従（setCenter = アニメなし・毎tick更新）
-      if (map && !selectedRef.current) {
-        map.setCenter(newPos)
-      }
     }, DEMO_TICK_MS)
 
     return () => clearInterval(tick)
   }, [playing, spots, map])
+
+  // カメラ: rAF で毎フレームposRefを読んでsetCenter（マーカーtickと独立）
+  useEffect(() => {
+    if (!map || !playing) return
+    let rafId
+    const follow = () => {
+      if (!selectedRef.current && posRef.current) map.setCenter(posRef.current)
+      rafId = requestAnimationFrame(follow)
+    }
+    rafId = requestAnimationFrame(follow)
+    return () => cancelAnimationFrame(rafId)
+  }, [map, playing])
 
   // カード開閉でカメラ切替
   useEffect(() => {
