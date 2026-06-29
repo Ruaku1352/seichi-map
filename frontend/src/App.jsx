@@ -111,6 +111,7 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
   const wobbleRef   = useRef(0)
   const selectedRef = useRef(selectedId)
   const startPosRef = useRef(startPos)
+  const lastCamRef  = useRef(0)
 
   useEffect(() => { selectedRef.current = selectedId }, [selectedId])
 
@@ -167,6 +168,15 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
       }
       posRef.current = newPos
       onPosChange({ ...newPos })
+
+      // カメラ: マーカーを追う（ズーム変更なし・スポット表示中は止める）
+      if (map && !selectedRef.current) {
+        const now = Date.now()
+        if (now - lastCamRef.current > 600) {
+          map.panTo(newPos)
+          lastCamRef.current = now
+        }
+      }
     }, DEMO_TICK_MS)
 
     return () => clearInterval(tick)
@@ -178,6 +188,9 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
     if (selectedId) {
       const spot = spots.find(s => s.id === selectedId)
       if (spot) { map.panTo({ lat: spot.lat, lng: spot.lng }); map.setZoom(15) }
+    } else if (posRef.current) {
+      map.panTo(posRef.current)
+      lastCamRef.current = Date.now()
     }
   }, [selectedId, map])
 
