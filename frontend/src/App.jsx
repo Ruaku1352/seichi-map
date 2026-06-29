@@ -439,6 +439,7 @@ function App() {
   const [locateTick, setLocateTick] = useState(0)
   const { pos: livePos, status: gpsStatus } = useLiveGPS(!demoMode)
 
+
   // データ読み込み
   useEffect(() => {
     fetch('/tourist_spots.json').then(r => r.json()).then(setTouristSpots).catch(() => {})
