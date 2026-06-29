@@ -511,7 +511,7 @@ function App() {
   const handleSpotSelect = useCallback((spot) => {
     spotJustSelectedRef.current = true
     setSelected(spot)
-    setTimeout(() => { spotJustSelectedRef.current = false }, 100)
+    setTimeout(() => { spotJustSelectedRef.current = false }, 600)
   }, [])
 
   const handleMapClick = (e) => {
