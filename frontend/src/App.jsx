@@ -136,7 +136,7 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
       // 次のターゲットを選ぶ
       if (!targetRef.current) {
         const eligible = spots.filter(s =>
-          haversine(sp, { lat: s.lat, lng: s.lng }) <= 60000 &&
+          haversine(sp, { lat: s.lat, lng: s.lng }) <= 40000 &&
           !visitedRef.current.has(s.id)
         )
         if (!eligible.length) { visitedRef.current = new Set(); return }
