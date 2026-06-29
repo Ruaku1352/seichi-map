@@ -7,7 +7,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 const PROXIMITY_METERS = 1000
 const THEME = '#7c3aed'
 const THEME_DARK = '#4c1d95'
-const DEMO_STEP = 0.002   // degrees per tick (≈220m)
+const DEMO_STEP = 0.0005  // degrees per tick (≈55m)
 const DEMO_TICK_MS = 150
 const ARRIVE_DEG = 0.009  // ≈1km, spot "arrived"
 
