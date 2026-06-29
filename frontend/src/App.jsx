@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, memo } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { APIProvider, Map, Marker, useMap } from '@vis.gl/react-google-maps'
 import { MarkerClusterer } from '@googlemaps/markerclusterer'
 
@@ -7,6 +7,9 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 const PROXIMITY_METERS = 1000
 const THEME = '#7c3aed'
 const THEME_DARK = '#4c1d95'
+const DEMO_STEP = 0.002   // degrees per tick (≈220m)
+const DEMO_TICK_MS = 150
+const ARRIVE_DEG = 0.009  // ≈1km, spot "arrived"
 
 const MAP_STYLES = [
   { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#fefdf5' }] },
@@ -24,7 +27,6 @@ const MAP_STYLES = [
   { featureType: 'transit.station', elementType: 'geometry', stylers: [{ color: '#fefce8' }] },
 ]
 
-// 聖地ピン用 SVG（紫の星マーク）
 const SPOT_ICON = {
   path: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   fillColor: '#7c3aed',
@@ -34,13 +36,6 @@ const SPOT_ICON = {
   scale: 1.0,
   anchor: { x: 12, y: 12 },
 }
-
-
-const DEMO_SPEEDS = [
-  { label: '30s', ms: 30000 },
-  { label: '60s', ms: 60000 },
-  { label: '90s', ms: 90000 },
-]
 
 function haversine(a, b) {
   const R = 6371000
@@ -52,66 +47,13 @@ function haversine(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s))
 }
 
-function interpolatePath(path, t) {
-  if (!path.length) return null
-  if (t <= 0) return path[0]
-  if (t >= 1) return path[path.length - 1]
-  const segs = []
-  let total = 0
-  for (let i = 1; i < path.length; i++) {
-    const d = haversine(path[i - 1], path[i])
-    segs.push(d)
-    total += d
-  }
-  let rem = t * total
-  for (let i = 0; i < segs.length; i++) {
-    if (rem <= segs[i]) {
-      const r = segs[i] > 0 ? rem / segs[i] : 0
-      return {
-        lat: path[i].lat + (path[i + 1].lat - path[i].lat) * r,
-        lng: path[i].lng + (path[i + 1].lng - path[i].lng) * r,
-      }
-    }
-    rem -= segs[i]
-  }
-  return path[path.length - 1]
+function formatDistance(meters) {
+  if (meters >= 100000) return 'Far away'
+  if (meters < 100) return `About ${Math.round(meters)}m`
+  return `About ${(meters / 1000).toFixed(1)}km`
 }
 
-function Route({ spots, origin, onPathReady }) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (!map || !origin || spots.length < 1) return
-
-    const service = new google.maps.DirectionsService()
-    const renderer = new google.maps.DirectionsRenderer({ suppressMarkers: true, preserveViewport: true })
-    renderer.setMap(map)
-
-    const waypoints = spots.slice(0, -1).map(s => ({
-      location: { lat: s.lat, lng: s.lng },
-      stopover: true,
-    }))
-
-    service.route({
-      origin: { lat: origin.lat, lng: origin.lng },
-      destination: { lat: spots[spots.length - 1].lat, lng: spots[spots.length - 1].lng },
-      waypoints,
-      travelMode: google.maps.TravelMode.WALKING,
-    }, (result, status) => {
-      if (status === 'OK') {
-        renderer.setDirections(result)
-        const path = result.routes[0].overview_path.map(p => ({ lat: p.lat(), lng: p.lng() }))
-        onPathReady(path)
-      }
-    })
-
-    return () => renderer.setMap(null)
-  }, [map, origin, spots])
-
-  return null
-}
-
-// 選択中スポット専用マーカー（パルスをここだけで持つ）
+// ── 選択中スポット専用マーカー（パルスをここだけで持つ）─────────────────
 function SelectedSpotMarker({ spot, onClick }) {
   const [pulse, setPulse] = useState(false)
   useEffect(() => {
@@ -129,7 +71,7 @@ function SelectedSpotMarker({ spot, onClick }) {
   )
 }
 
-// 聖地ピンのクラスタリング管理（Reactの再描画から切り離し）
+// ── 聖地ピンクラスタリング（Reactの再描画から切り離し）────────────────
 function ClusteredSpotMarkers({ spots, selectedId, onSelect }) {
   const map = useMap()
   const clustererRef = useRef(null)
@@ -151,58 +93,159 @@ function ClusteredSpotMarkers({ spots, selectedId, onSelect }) {
           title: spot.spot_name_en,
           icon: SPOT_ICON,
         })
-        m.addListener('click', () => onSelect(spot))
+        if (onSelect) m.addListener('click', () => onSelect(spot))
         return m
       })
     clustererRef.current.addMarkers(markers)
-  }, [spots, selectedId])
+  }, [spots, selectedId, onSelect])
 
   return null
 }
 
-// フロントサイドキャッシュ（spot_id -> intro text）
+// ── デモ自由移動エンジン＋カメラ制御 ────────────────────────────────────
+function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
+  const map = useMap()
+  const posRef      = useRef(null)
+  const targetRef   = useRef(null)
+  const visitedRef  = useRef(new Set())
+  const wobbleRef   = useRef(0)
+  const lastCamRef  = useRef(0)
+  const selectedRef = useRef(selectedId)
+  const startPosRef = useRef(startPos)
+
+  useEffect(() => { selectedRef.current = selectedId }, [selectedId])
+
+  // startPos が変わったらリセット
+  useEffect(() => {
+    startPosRef.current = startPos
+    posRef.current = startPos || null
+    targetRef.current = null
+    visitedRef.current = new Set()
+    wobbleRef.current = 0
+    if (startPos) onPosChange({ ...startPos })
+  }, [startPos])
+
+  // 移動ループ
+  useEffect(() => {
+    if (!playing) return
+
+    const tick = setInterval(() => {
+      const sp  = startPosRef.current
+      const pos = posRef.current
+      if (!sp || !pos) return
+
+      // 次のターゲットを選ぶ
+      if (!targetRef.current) {
+        const eligible = spots.filter(s =>
+          haversine(sp, { lat: s.lat, lng: s.lng }) <= 100000 &&
+          !visitedRef.current.has(s.id)
+        )
+        if (!eligible.length) { visitedRef.current = new Set(); return }
+        // 近い順に選ぶ（揺らぎのため上位3件からランダム）
+        eligible.sort((a, b) =>
+          haversine(pos, { lat: a.lat, lng: a.lng }) - haversine(pos, { lat: b.lat, lng: b.lng })
+        )
+        targetRef.current = eligible[Math.floor(Math.random() * Math.min(3, eligible.length))]
+      }
+
+      const { lat: tLat, lng: tLng, id } = targetRef.current
+      const dLat = tLat - pos.lat
+      const dLng = tLng - pos.lng
+      const dist  = Math.sqrt(dLat * dLat + dLng * dLng)
+
+      if (dist < ARRIVE_DEG) {
+        visitedRef.current.add(id)
+        targetRef.current = null
+        return
+      }
+
+      // 向きにゆるい揺らぎ
+      wobbleRef.current = wobbleRef.current * 0.85 + (Math.random() - 0.5) * 0.3
+      const ang = Math.atan2(dLng, dLat) + wobbleRef.current
+      const newPos = {
+        lat: pos.lat + Math.cos(ang) * DEMO_STEP,
+        lng: pos.lng + Math.sin(ang) * DEMO_STEP,
+      }
+      posRef.current = newPos
+      onPosChange({ ...newPos })
+
+      // カメラ: 2.5秒ごとにマーカーを追う（カード表示中は動かさない）
+      if (map && !selectedRef.current) {
+        const now = Date.now()
+        if (now - lastCamRef.current > 2500) {
+          map.panTo(newPos)
+          map.setZoom(11)
+          lastCamRef.current = now
+        }
+      }
+    }, DEMO_TICK_MS)
+
+    return () => clearInterval(tick)
+  }, [playing, spots, map])
+
+  // カード開閉でカメラ切替
+  useEffect(() => {
+    if (!map) return
+    if (selectedId) {
+      const spot = spots.find(s => s.id === selectedId)
+      if (spot) { map.panTo({ lat: spot.lat, lng: spot.lng }); map.setZoom(15) }
+    } else if (posRef.current) {
+      map.panTo(posRef.current)
+      map.setZoom(11)
+      lastCamRef.current = Date.now()
+    }
+  }, [selectedId, map])
+
+  return null
+}
+
+// ── ライブモードのカメラ制御 ─────────────────────────────────────────────
+function LiveCamera({ livePos, selected }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!map) return
+    if (selected) {
+      map.panTo({ lat: selected.lat, lng: selected.lng })
+      map.setZoom(15)
+    } else {
+      map.panTo(livePos)
+      map.setZoom(13)
+    }
+  }, [selected?.id, map])
+  return null
+}
+
+// ── AIキャッシュ ─────────────────────────────────────────────────────────
 const introCache = {}
 
-function Card({ spot, onClose }) {
-  const [intro, setIntro] = useState(introCache[spot.id] || spot.intro_short_en)
+// ── スポットカード（距離表示付き）────────────────────────────────────────
+function Card({ spot, currentPos, onClose }) {
+  const [intro, setIntro]   = useState(introCache[spot.id] || spot.intro_short_en)
   const [loading, setLoading] = useState(!introCache[spot.id])
-  const [aiOk, setAiOk] = useState(!!introCache[spot.id])
+  const [aiOk, setAiOk]     = useState(!!introCache[spot.id])
   const [expanded, setExpanded] = useState(false)
+
+  const distText = currentPos
+    ? formatDistance(haversine(currentPos, { lat: spot.lat, lng: spot.lng }))
+    : null
 
   useEffect(() => {
     if (introCache[spot.id]) {
-      setIntro(introCache[spot.id])
-      setLoading(false)
-      setAiOk(true)
-      return
+      setIntro(introCache[spot.id]); setLoading(false); setAiOk(true); return
     }
-    setIntro(spot.intro_short_en)
-    setLoading(true)
-    setAiOk(false)
+    setIntro(spot.intro_short_en); setLoading(true); setAiOk(false)
     fetch(`${BACKEND_URL}/generate-intro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id: spot.id,
-        spot_name_en: spot.spot_name_en,
+        id: spot.id, spot_name_en: spot.spot_name_en,
         anime_title_en: spot.anime_title_en,
-        scene_description: spot.scene_description,
-        area: spot.area,
+        scene_description: spot.scene_description, area: spot.area,
       }),
     })
-      .then(r => { if (!r.ok) throw new Error('server error'); return r.json() })
-      .then(data => {
-        if (data.intro) {
-          introCache[spot.id] = data.intro
-          setIntro(data.intro)
-          setAiOk(true)
-        }
-      })
-      .catch(() => {
-        // 通信・API失敗 → JSON の元テキストをそのまま表示
-        setIntro(spot.intro_short_en)
-        setAiOk(false)
-      })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => { if (data.intro) { introCache[spot.id] = data.intro; setIntro(data.intro); setAiOk(true) } })
+      .catch(() => { setIntro(spot.intro_short_en); setAiOk(false) })
       .finally(() => setLoading(false))
   }, [spot.id])
 
@@ -214,7 +257,6 @@ function Card({ spot, onClose }) {
       boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)',
       zIndex: 10, overflow: 'hidden',
     }}>
-      {/* ヘッダー帯（タップで展開） */}
       <div
         onClick={() => setExpanded(e => !e)}
         style={{
@@ -234,19 +276,21 @@ function Card({ spot, onClose }) {
             📍 {spot.area}
           </div>
         )}
-        {/* 展開インジケーター */}
+        {distText && (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>
+            🚶 {distText}
+          </div>
+        )}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           marginTop: 8, padding: '4px 10px', borderRadius: 20,
           background: 'rgba(255,255,255,0.25)',
-          fontSize: 12, fontWeight: 700, color: '#fff',
-          letterSpacing: '0.03em',
+          fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: '0.03em',
         }}>
           {expanded ? '▲ close' : '▼ read more'}
         </div>
       </div>
 
-      {/* 閉じるボタン */}
       <button onClick={onClose} style={{
         position: 'absolute', top: 10, right: 12,
         background: 'rgba(255,255,255,0.2)', border: 'none',
@@ -255,7 +299,6 @@ function Card({ spot, onClose }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>✕</button>
 
-      {/* 本文（展開時のみ表示） */}
       {expanded && (
         <div style={{ padding: '14px 18px 12px' }}>
           <div style={{ fontSize: 14, color: '#333', lineHeight: 1.7 }}>
@@ -279,6 +322,7 @@ function Card({ spot, onClose }) {
   )
 }
 
+// ── 観光スポットポップアップ ─────────────────────────────────────────────
 function TouristPopup({ spot, onClose }) {
   return (
     <div style={{
@@ -313,90 +357,16 @@ function TouristPopup({ spot, onClose }) {
   )
 }
 
-function DemoControls({ demoMode, setDemoMode, playing, onPlay, onPause, onReset, onScrub, progress, hasPath, speedMs, setSpeedMs }) {
-  return (
-    <div style={{
-      position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-      background: 'rgba(255,255,255,0.95)', borderRadius: 24, padding: '8px 14px',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.18)', display: 'flex', gap: 8,
-      alignItems: 'center', zIndex: 10, userSelect: 'none',
-      maxWidth: 'calc(100vw - 32px)',
-    }}>
-      <button
-        onClick={() => setDemoMode(m => !m)}
-        style={{
-          fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 12,
-          border: 'none', cursor: 'pointer',
-          background: demoMode ? '#7c3aed' : '#e0e0e0',
-          color: demoMode ? '#fff' : '#555',
-        }}
-      >
-        {demoMode ? 'DEMO' : 'LIVE'}
-      </button>
-      {demoMode && (
-        <>
-          <button
-            onClick={playing ? onPause : onPlay}
-            disabled={!hasPath}
-            style={{
-              fontSize: 20, background: 'none', border: 'none',
-              cursor: hasPath ? 'pointer' : 'default', opacity: hasPath ? 1 : 0.35,
-              lineHeight: 1,
-            }}
-          >
-            {playing ? '⏸' : '▶️'}
-          </button>
-          <button
-            onClick={onReset}
-            style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
-          >
-            ⏮
-          </button>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {DEMO_SPEEDS.map(s => (
-              <button
-                key={s.ms}
-                onClick={() => { setSpeedMs(s.ms); onReset() }}
-                style={{
-                  fontSize: 11, fontWeight: 700, padding: '3px 7px', borderRadius: 10,
-                  border: 'none', cursor: 'pointer',
-                  background: speedMs === s.ms ? '#7c3aed' : '#e8e8e8',
-                  color: speedMs === s.ms ? '#fff' : '#666',
-                }}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ width: 70, height: 5, background: '#e8e8e8', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{
-              width: `${progress * 100}%`, height: '100%',
-              background: '#7c3aed', borderRadius: 3, transition: 'width 0.1s linear',
-            }} />
-          </div>
-          <input
-            type="range" min={0} max={1000} value={Math.round(progress * 1000)}
-            onChange={e => onScrub(e.target.value / 1000)}
-            style={{ width: 80, accentColor: '#7c3aed', cursor: 'pointer' }}
-          />
-        </>
-      )}
-    </div>
-  )
-}
-
+// ── GPS フック ────────────────────────────────────────────────────────────
 function useLiveGPS(enabled) {
-  const [pos, setPos] = useState(TOKYO)
-  const [status, setStatus] = useState('idle') // 'idle' | 'pending' | 'ok' | 'error'
+  const [pos, setPos]       = useState(TOKYO)
+  const [status, setStatus] = useState('idle')
   useEffect(() => {
     if (!enabled) { setStatus('idle'); return }
     if (!navigator.geolocation) { setStatus('error'); return }
     setStatus('pending')
     const id = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        setPos({ lat: coords.latitude, lng: coords.longitude })
-        setStatus('ok')
-      },
+      ({ coords }) => { setPos({ lat: coords.latitude, lng: coords.longitude }); setStatus('ok') },
       () => { setPos(TOKYO); setStatus('error') },
       { enableHighAccuracy: true, maximumAge: 5000 },
     )
@@ -420,31 +390,30 @@ function GpsWidget({ status }) {
       background: 'rgba(255,255,255,0.95)', borderRadius: 20,
       padding: '6px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
       display: 'flex', alignItems: 'center', gap: 6,
-      fontSize: 12, fontWeight: 600, color: l.color,
-      maxWidth: 220,
+      fontSize: 12, fontWeight: 600, color: l.color, maxWidth: 220,
     }}>
-      <span>{l.icon}</span>
-      <span>{l.text}</span>
+      <span>{l.icon}</span><span>{l.text}</span>
     </div>
   )
 }
 
+// ── App ───────────────────────────────────────────────────────────────────
 function App() {
-  const [spots, setSpots] = useState([])
+  const [spots, setSpots]               = useState([])
   const [touristSpots, setTouristSpots] = useState([])
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected]         = useState(null)
   const [selectedTourist, setSelectedTourist] = useState(null)
-  const [routePath, setRoutePath] = useState([])
 
-  // Demo mode state
-  const [demoMode, setDemoMode] = useState(true)
-  const [playing, setPlaying] = useState(false)
-  const [demoProgress, setDemoProgress] = useState(0)
-  const [speedMs, setSpeedMs] = useState(30000)
+  const [demoMode, setDemoMode]         = useState(true)
+  const [playing, setPlaying]           = useState(false)
+  const [startPos, setStartPos]         = useState(null)   // デモ中心点
+  const [startPosMode, setStartPosMode] = useState(false)  // 位置指定待ち
+  const [demoPos, setDemoPos]           = useState(null)   // 擬似マーカー位置
+
   const triggeredRef = useRef(new Set())
-
   const { pos: livePos, status: gpsStatus } = useLiveGPS(!demoMode)
 
+  // データ読み込み
   useEffect(() => {
     fetch('/tourist_spots.json').then(r => r.json()).then(setTouristSpots).catch(() => {})
   }, [])
@@ -460,63 +429,28 @@ function App() {
           s.spot_name_en && s.anime_title_en
         )
         setSpots(data)
-        // 全聖地ぶんの紹介文を起動時に一括生成
         fetch(`${BACKEND_URL}/prefetch-intros`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data.map(s => ({
-            id: s.id,
-            spot_name_en: s.spot_name_en,
+            id: s.id, spot_name_en: s.spot_name_en,
             anime_title_en: s.anime_title_en,
-            scene_description: s.scene_description,
-            area: s.area,
+            scene_description: s.scene_description, area: s.area,
           }))),
         })
           .then(r => r.json())
-          .then(res => {
-            if (res.intros) Object.assign(introCache, res.intros)
-          })
+          .then(res => { if (res.intros) Object.assign(introCache, res.intros) })
           .catch(() => {})
       })
   }, [])
 
-  // Animation loop
-  useEffect(() => {
-    if (!playing || !demoMode || routePath.length === 0) return
-    const step = 100 / speedMs
-    const id = setInterval(() => {
-      setDemoProgress(prev => {
-        const next = prev + step
-        if (next >= 1) { setPlaying(false); return 1 }
-        return next
-      })
-    }, 100)
-    return () => clearInterval(id)
-  }, [playing, demoMode, routePath.length, speedMs])
-
-  const demoPos = useMemo(
-    () => (demoMode && routePath.length) ? interpolatePath(routePath, demoProgress) : null,
-    [demoMode, routePath, demoProgress],
-  )
-
+  // activePos: デモ中は擬似マーカー、ライブ中はGPS
   const activePos = demoMode ? demoPos : livePos
 
-  // 現在地から100km以内の聖地だけルートに使う（距離順にソート）
-  const nearbySpots = useMemo(() => {
-    if (!spots.length) return []
-    return spots
-      .filter(s => haversine(livePos, { lat: s.lat, lng: s.lng }) <= 50000)
-      .sort((a, b) =>
-        haversine(livePos, { lat: a.lat, lng: a.lng }) -
-        haversine(livePos, { lat: b.lat, lng: b.lng })
-      )
-  }, [spots, livePos])
-
-  // Proximity trigger: auto-show card when marker nears a spot (demo or live)
+  // 近接判定
   useEffect(() => {
     if (!activePos || !spots.length) return
 
-    // 表示中のカードが範囲外に出たら閉じる
     setSelected(prev => {
       if (prev && haversine(activePos, { lat: prev.lat, lng: prev.lng }) > PROXIMITY_METERS) {
         triggeredRef.current.delete(prev.id)
@@ -525,7 +459,6 @@ function App() {
       return prev
     })
 
-    // 新しい聖地に近づいたらカードを出す
     for (const spot of spots) {
       if (
         haversine(activePos, { lat: spot.lat, lng: spot.lng }) < PROXIMITY_METERS &&
@@ -539,16 +472,29 @@ function App() {
   }, [activePos, spots])
 
   const handleReset = () => {
-    setDemoProgress(0)
     setPlaying(false)
+    setDemoPos(null)
+    setStartPos(null)
+    setStartPosMode(false)
     triggeredRef.current.clear()
     setSelected(null)
   }
 
-  const handleScrub = (val) => {
-    setPlaying(false)
-    setDemoProgress(val)
-    // triggeredRef はクリアしない → スクラバー操作中のチカチカを防ぐ
+  const handleMapClick = (e) => {
+    if (startPosMode) {
+      const ll = e.detail?.latLng
+      if (!ll) return
+      const lat = typeof ll.lat === 'function' ? ll.lat() : ll.lat
+      const lng = typeof ll.lng === 'function' ? ll.lng() : ll.lng
+      setStartPos({ lat, lng })
+      setStartPosMode(false)
+      setDemoPos({ lat, lng })
+      triggeredRef.current.clear()
+      setSelected(null)
+    } else {
+      setSelected(null)
+      setSelectedTourist(null)
+    }
   }
 
   return (
@@ -567,33 +513,44 @@ function App() {
             strictBounds: false,
           }}
           styles={MAP_STYLES}
-          onClick={() => { setSelected(null); setSelectedTourist(null) }}
+          onClick={handleMapClick}
         >
-          <Route spots={nearbySpots} origin={livePos} onPathReady={setRoutePath} />
+          {demoMode && startPos && (
+            <DemoEngine
+              spots={spots}
+              startPos={startPos}
+              playing={playing}
+              onPosChange={setDemoPos}
+              selectedId={selected?.id ?? null}
+            />
+          )}
+          {!demoMode && (
+            <LiveCamera livePos={livePos} selected={selected} />
+          )}
+
+          {/* 観光スポットピン */}
           {touristSpots.map(t => (
             <Marker
               key={t.id}
               position={{ lat: t.lat, lng: t.lng }}
               title={t.name}
-              icon={{
-                path: 0,
-                fillColor: '#f97316',
-                fillOpacity: 0.9,
-                strokeColor: '#fff',
-                strokeWeight: 2,
-                scale: 5,
-              }}
+              icon={{ path: 0, fillColor: '#f97316', fillOpacity: 0.9,
+                strokeColor: '#fff', strokeWeight: 2, scale: 5 }}
               onClick={() => { setSelectedTourist(t); setSelected(null) }}
             />
           ))}
+
+          {/* 聖地ピン（クラスタリング） */}
           <ClusteredSpotMarkers
             spots={spots}
             selectedId={selected?.id}
-            onSelect={setSelected}
+            onSelect={demoMode ? null : setSelected}
           />
           {selected && (
-            <SelectedSpotMarker spot={selected} onClick={() => setSelected(selected)} />
+            <SelectedSpotMarker spot={selected} onClick={() => {}} />
           )}
+
+          {/* 現在地マーカー */}
           {activePos && (
             <Marker
               position={activePos}
@@ -602,31 +559,90 @@ function App() {
               icon={{
                 path: google.maps.SymbolPath.CIRCLE,
                 fillColor: demoMode ? THEME : '#1d6ef5',
-                fillOpacity: 1,
-                strokeColor: '#fff',
-                strokeWeight: 3,
-                scale: 10,
+                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3, scale: 10,
               }}
             />
           )}
         </Map>
       </APIProvider>
-      <DemoControls
-        demoMode={demoMode}
-        setDemoMode={m => { setDemoMode(m); handleReset() }}
-        playing={playing}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onReset={handleReset}
-        onScrub={handleScrub}
-        progress={demoProgress}
-        hasPath={routePath.length > 0}
-        speedMs={speedMs}
-        setSpeedMs={setSpeedMs}
-      />
+
+      {/* コントロールバー */}
+      <div style={{
+        position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(255,255,255,0.95)', borderRadius: 24, padding: '8px 12px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
+        display: 'flex', gap: 6, alignItems: 'center',
+        zIndex: 10, userSelect: 'none',
+        maxWidth: 'calc(100vw - 24px)', flexWrap: 'wrap', justifyContent: 'center',
+      }}>
+        {/* DEMO / LIVE 切替 */}
+        <button
+          onClick={() => { setDemoMode(m => !m); handleReset() }}
+          style={{
+            fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 12,
+            border: 'none', cursor: 'pointer',
+            background: demoMode ? THEME : '#e0e0e0',
+            color: demoMode ? '#fff' : '#555',
+          }}
+        >
+          {demoMode ? 'DEMO' : 'LIVE'}
+        </button>
+
+        {demoMode && (<>
+          {/* 開始位置指定 */}
+          <button
+            onClick={() => setStartPosMode(m => !m)}
+            style={{
+              fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 12,
+              border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+              background: startPosMode ? '#f59e0b' : startPos ? '#ede9ff' : THEME,
+              color: startPosMode ? '#fff' : startPos ? THEME : '#fff',
+            }}
+          >
+            {startPosMode ? '📍 Tap map…' : startPos ? '📍 Change Start' : '📍 Set Start'}
+          </button>
+
+          {/* 再生 / 一時停止 */}
+          <button
+            onClick={() => setPlaying(p => !p)}
+            disabled={!startPos}
+            style={{
+              fontSize: 20, background: 'none', border: 'none', lineHeight: 1,
+              cursor: startPos ? 'pointer' : 'default', opacity: startPos ? 1 : 0.35,
+            }}
+          >
+            {playing ? '⏸' : '▶️'}
+          </button>
+
+          {/* 最初に戻す */}
+          <button
+            onClick={handleReset}
+            style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
+          >
+            ⏮
+          </button>
+        </>)}
+      </div>
+
+      {/* 位置指定中のオーバーレイヒント */}
+      {startPosMode && (
+        <div style={{
+          position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(245,158,11,0.95)', borderRadius: 16, padding: '8px 18px',
+          color: '#fff', fontWeight: 700, fontSize: 13, zIndex: 10, whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+        }}>
+          Tap anywhere on the map to set start position
+        </div>
+      )}
+
       {!demoMode && <GpsWidget status={gpsStatus} />}
-      {selected && <Card spot={selected} onClose={() => setSelected(null)} />}
-      {!selected && selectedTourist && <TouristPopup spot={selectedTourist} onClose={() => setSelectedTourist(null)} />}
+      {selected && (
+        <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} />
+      )}
+      {!selected && selectedTourist && (
+        <TouristPopup spot={selectedTourist} onClose={() => setSelectedTourist(null)} />
+      )}
     </div>
   )
 }
