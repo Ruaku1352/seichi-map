@@ -646,13 +646,6 @@ function App() {
             {playing ? '⏸' : '▶️'}
           </button>
 
-          {/* 最初に戻す */}
-          <button
-            onClick={handleReset}
-            style={{ fontSize: 17, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
-          >
-            ⏮
-          </button>
         </>)}
       </div>
 
