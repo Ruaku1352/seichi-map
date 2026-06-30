@@ -633,14 +633,12 @@ function App() {
       </APIProvider>
 
       {/* 検索バー（既存ヘッダー右側に重ねる） */}
-      {showSuggestions && (
-        <div
-          onClick={() => setShowSuggestions(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1999 }}
-        />
-      )}
-      <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 2000, width: 170 }}>
-        <div style={{ position: 'relative' }}>
+      <div style={{
+        position: 'fixed', top: 0, right: 12, height: 50,
+        display: 'flex', alignItems: 'center',
+        zIndex: 2000, width: 170,
+      }}>
+        <div style={{ position: 'relative', width: '100%' }}>
           <span style={{
             position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
             fontSize: 12, pointerEvents: 'none',
@@ -651,21 +649,26 @@ function App() {
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setSearchAnime(null); setShowSuggestions(true) }}
             onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            onKeyDown={e => { if (e.key === 'Escape') { setShowSuggestions(false); e.target.blur() } }}
             style={{
               width: '100%', boxSizing: 'border-box',
-              border: 'none', borderRadius: 14, padding: '5px 24px 5px 24px',
-              fontSize: 12,
+              border: 'none', borderRadius: 14, padding: '6px 26px 6px 26px',
+              fontSize: 16, transform: 'scale(0.75)', transformOrigin: 'right center',
               background: 'rgba(255,255,255,0.15)', color: '#fff',
               outline: 'none',
             }}
           />
           {searchQuery && (
             <button
-              onClick={() => { setSearchQuery(''); setSearchAnime(null); setShowSuggestions(false) }}
+              onMouseDown={e => {
+                e.preventDefault()
+                setSearchQuery(''); setSearchAnime(null); setShowSuggestions(false)
+              }}
               style={{
                 position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
                 background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)',
-                fontSize: 12, cursor: 'pointer', padding: 0, lineHeight: 1,
+                fontSize: 13, cursor: 'pointer', padding: 0, lineHeight: 1,
               }}
             >✕</button>
           )}
@@ -674,15 +677,20 @@ function App() {
           <div style={{
             position: 'absolute', top: '100%', right: 0, width: 220, marginTop: 4,
             background: 'white', borderRadius: 10,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)', overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)', overflow: 'hidden', zIndex: 2001,
           }}>
             {suggestions.slice(0, 6).map(title => (
               <div
                 key={title}
-                onMouseDown={() => { setSearchQuery(title); setSearchAnime(title); setShowSuggestions(false) }}
-                onTouchEnd={() => { setSearchQuery(title); setSearchAnime(title); setShowSuggestions(false) }}
+                onMouseDown={e => {
+                  e.preventDefault()
+                  setSearchQuery(title); setSearchAnime(title); setShowSuggestions(false)
+                }}
+                onTouchEnd={() => {
+                  setSearchQuery(title); setSearchAnime(title); setShowSuggestions(false)
+                }}
                 style={{
-                  padding: '9px 12px', cursor: 'pointer', fontSize: 12,
+                  padding: '10px 12px', cursor: 'pointer', fontSize: 14,
                   color: '#333', borderBottom: '1px solid #f3f4f6',
                 }}
               >
