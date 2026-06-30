@@ -29,13 +29,13 @@ const MAP_STYLES = [
 ]
 
 const BLUE_SPOT_ICON = {
-  path: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
   fillColor: '#16a34a',
   fillOpacity: 1,
   strokeColor: '#fff',
   strokeWeight: 1.5,
-  scale: 1.0,
-  anchor: { x: 12, y: 12 },
+  scale: 1.8,
+  anchor: { x: 12, y: 22 },
 }
 
 const DIM_SPOT_ICON = {
