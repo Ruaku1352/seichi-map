@@ -634,8 +634,8 @@ function App() {
 
       {/* ヘッダー（検索バー） */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 48,
-        background: '#1a1a1a', zIndex: 20,
+        position: 'fixed', top: 0, left: 0, right: 0, height: 48,
+        background: '#1a1a1a', zIndex: 9999,
         display: 'flex', alignItems: 'center', padding: '0 16px',
       }}>
         <div style={{ position: 'relative', flex: 1, maxWidth: 400 }}>
@@ -672,7 +672,7 @@ function App() {
             <div style={{
               position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
               background: 'white', borderRadius: 12,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 30,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 10000,
             }}>
               {suggestions.slice(0, 6).map(title => (
                 <div
