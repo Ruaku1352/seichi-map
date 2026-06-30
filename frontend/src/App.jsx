@@ -216,9 +216,6 @@ function LiveCamera({ livePos, selected, locateTick }) {
     if (selected) {
       map.panTo({ lat: selected.lat, lng: selected.lng })
       map.setZoom(15)
-    } else if (livePosRef.current) {
-      map.panTo(livePosRef.current)
-      map.setZoom(13)
     }
   }, [selected?.id, map])
 
