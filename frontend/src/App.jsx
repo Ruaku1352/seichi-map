@@ -649,6 +649,26 @@ function App() {
         </>)}
       </div>
 
+      {/* 初回ガイド：Set Start を促す吹き出し */}
+      {demoMode && !startPos && !startPosMode && (
+        <div style={{
+          position: 'absolute', bottom: 44, left: 12,
+          background: THEME, borderRadius: 12, padding: '7px 12px',
+          color: '#fff', fontWeight: 700, fontSize: 13, zIndex: 10, whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+        }}>
+          👆 Tap "📍 Set Start" to begin!
+          {/* 下向き三角（吹き出しの矢印） */}
+          <div style={{
+            position: 'absolute', bottom: -7, left: 20,
+            width: 0, height: 0,
+            borderLeft: '7px solid transparent',
+            borderRight: '7px solid transparent',
+            borderTop: `7px solid ${THEME}`,
+          }} />
+        </div>
+      )}
+
       {/* 位置指定中のオーバーレイヒント */}
       {startPosMode && (
         <div style={{
