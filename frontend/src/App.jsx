@@ -672,12 +672,12 @@ function App() {
       {/* 位置指定中のオーバーレイヒント */}
       {startPosMode && (
         <div style={{
-          position: 'absolute', bottom: 56, left: 12,
-          background: 'rgba(245,158,11,0.95)', borderRadius: 16, padding: '8px 18px',
-          color: '#fff', fontWeight: 700, fontSize: 13, zIndex: 10, whiteSpace: 'nowrap',
+          position: 'absolute', bottom: 44, left: 12,
+          background: 'rgba(245,158,11,0.95)', borderRadius: 10, padding: '5px 10px',
+          color: '#fff', fontWeight: 700, fontSize: 11, zIndex: 10, whiteSpace: 'nowrap',
           boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         }}>
-          Tap anywhere on the map to set start position
+          📍 Tap map to set start
         </div>
       )}
 
