@@ -64,6 +64,16 @@ const SPOT_ICON = {
   anchor: { x: 12, y: 12 },
 }
 
+const FAVORITE_SPOT_ICON = {
+  path: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  fillColor: '#ec4899',
+  fillOpacity: 1,
+  strokeColor: '#fff',
+  strokeWeight: 1.5,
+  scale: 1.0,
+  anchor: { x: 12, y: 12 },
+}
+
 function haversine(a, b) {
   const R = 6371000
   const dLat = (b.lat - a.lat) * Math.PI / 180
@@ -99,7 +109,7 @@ function SelectedSpotMarker({ spot, onClick }) {
 }
 
 // ── 聖地ピンクラスタリング（Reactの再描画から切り離し）────────────────
-function ClusteredSpotMarkers({ spots, selectedId, onSelect, highlightAnime }) {
+function ClusteredSpotMarkers({ spots, selectedId, onSelect, highlightAnime, favorites }) {
   const map = useMap()
   const clustererRef = useRef(null)
 
@@ -115,7 +125,8 @@ function ClusteredSpotMarkers({ spots, selectedId, onSelect, highlightAnime }) {
     const markers = spots
       .filter(s => s.id !== selectedId && !(highlightAnime && s.anime_title_en === highlightAnime))
       .map(spot => {
-        const icon = highlightAnime ? DIM_SPOT_ICON : SPOT_ICON
+        const isFav = favorites?.has(spot.id)
+        const icon = highlightAnime ? DIM_SPOT_ICON : isFav ? FAVORITE_SPOT_ICON : SPOT_ICON
         const m = new google.maps.Marker({
           position: { lat: spot.lat, lng: spot.lng },
           title: spot.spot_name_en,
@@ -125,7 +136,7 @@ function ClusteredSpotMarkers({ spots, selectedId, onSelect, highlightAnime }) {
         return m
       })
     clustererRef.current.addMarkers(markers)
-  }, [spots, selectedId, onSelect, highlightAnime])
+  }, [spots, selectedId, onSelect, highlightAnime, favorites])
 
   return null
 }
@@ -281,7 +292,7 @@ const introCache = {}
 // ── スポットカード（距離表示付き）────────────────────────────────────────
 const isPlaceholder = t => !t || t.startsWith('PLACEHOLDER')
 
-function Card({ spot, currentPos, onClose, userPrefs }) {
+function Card({ spot, currentPos, onClose, userPrefs, isFavorite, onToggleFavorite }) {
   const staticIntro = spot.generic_intro_en || (!isPlaceholder(spot.intro_short_en) ? spot.intro_short_en : GENERIC_INTRO)
   const [intro, setIntro]   = useState(introCache[spot.id] || staticIntro)
   const [loading, setLoading] = useState(!introCache[spot.id])
@@ -326,7 +337,7 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
         onClick={() => setExpanded(e => !e)}
         style={{
           background: `linear-gradient(135deg, ${THEME} 0%, ${THEME_DARK} 100%)`,
-          padding: '14px 44px 14px 18px', cursor: 'pointer',
+          padding: '14px 80px 14px 18px', cursor: 'pointer',
         }}
       >
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600,
@@ -356,6 +367,16 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
         </div>
       </div>
 
+      <button
+        onClick={e => { e.stopPropagation(); onToggleFavorite(spot.id) }}
+        style={{
+          position: 'absolute', top: 10, right: 44,
+          background: 'rgba(255,255,255,0.2)', border: 'none',
+          fontSize: 15, width: 28, height: 28,
+          borderRadius: '50%', cursor: 'pointer', lineHeight: 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >{isFavorite ? '❤️' : '🤍'}</button>
       <button onClick={onClose} style={{
         position: 'absolute', top: 10, right: 12,
         background: 'rgba(255,255,255,0.2)', border: 'none',
@@ -378,8 +399,22 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
               </div>
             ) : intro}
           </div>
-          <div style={{ fontSize: 11, color: '#bbb', marginTop: 8, textAlign: 'right' }}>
-            {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '6px 14px', borderRadius: 20,
+                background: THEME, color: '#fff',
+                fontSize: 12, fontWeight: 700, textDecoration: 'none',
+              }}
+            >🗺️ Get directions</a>
+            <div style={{ fontSize: 11, color: '#bbb' }}>
+              {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+            </div>
           </div>
         </div>
       )}
@@ -609,6 +644,10 @@ const SURVEY_KEY = 'seichi_prefs'
 const loadPrefs  = () => { try { const r = localStorage.getItem(SURVEY_KEY); return r ? JSON.parse(r) : null } catch { return null } }
 const savePrefs  = p  => localStorage.setItem(SURVEY_KEY, JSON.stringify(p))
 
+const FAVORITES_KEY = 'seichi_favorites'
+const loadFavorites = () => { try { const r = localStorage.getItem(FAVORITES_KEY); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() } }
+const saveFavorites = f => localStorage.setItem(FAVORITES_KEY, JSON.stringify([...f]))
+
 function OnboardingSurvey({ onComplete }) {
   const [step, setStep]           = useState(0)
   const [nickname, setNickname]   = useState('')
@@ -781,6 +820,16 @@ function App() {
   const [userPrefs, setUserPrefs]   = useState(() => loadPrefs())
   const [showSurvey, setShowSurvey] = useState(() => !loadPrefs())
   const [showSettings, setShowSettings] = useState(false)
+
+  const [favorites, setFavorites] = useState(() => loadFavorites())
+  const toggleFavorite = useCallback(id => {
+    setFavorites(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      saveFavorites(next)
+      return next
+    })
+  }, [])
 
   const handleSaveSettings = newPrefs => {
     savePrefs(newPrefs)
@@ -981,6 +1030,7 @@ function App() {
             selectedId={selected?.id}
             onSelect={demoMode ? null : handleSpotSelect}
             highlightAnime={searchAnime}
+            favorites={favorites}
           />
 
           {/* 検索ヒットピン（クラスタリングなし・赤ピン） */}
@@ -1226,7 +1276,7 @@ function App() {
         />
       )}
       {selected && (
-        <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} userPrefs={userPrefs} />
+        <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} userPrefs={userPrefs} isFavorite={favorites.has(selected.id)} onToggleFavorite={toggleFavorite} />
       )}
       {/* GPSローディングオーバーレイ */}
       {!gpsReady && (
