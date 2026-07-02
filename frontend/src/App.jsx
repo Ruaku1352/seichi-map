@@ -274,7 +274,8 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
     : null
 
   useEffect(() => {
-    if (introCache[spot.id]) {
+    const hasPersonalization = !!(userPrefs?.nickname || userPrefs?.familiarity || userPrefs?.mood || userPrefs?.travelStyle)
+    if (!hasPersonalization && introCache[spot.id]) {
       setIntro(introCache[spot.id]); setLoading(false); setAiOk(true); return
     }
     setIntro(null); setLoading(true); setAiOk(false)
@@ -289,7 +290,7 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
       }),
     })
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(data => { if (data.intro) { introCache[spot.id] = data.intro; setIntro(data.intro); setAiOk(true) } })
+      .then(data => { if (data.intro) { if (!hasPersonalization) introCache[spot.id] = data.intro; setIntro(data.intro); setAiOk(true) } })
       .catch(() => { setIntro(staticIntro); setAiOk(false) })
       .finally(() => setLoading(false))
   }, [spot.id])
