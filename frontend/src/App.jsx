@@ -151,7 +151,7 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
     visitedRef.current = new Set()
     wobbleRef.current = 0
     if (startPos) onPosChange({ ...startPos })
-  }, [startPos])
+  }, [startPos, onPosChange])
 
   // 移動ループ
   useEffect(() => {
@@ -203,7 +203,7 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
     }, DEMO_TICK_MS)
 
     return () => clearInterval(tick)
-  }, [playing, spots, map])
+  }, [playing, spots, onPosChange])
 
   // カメラ: rAF で毎フレームposRefを読んでsetCenter（マーカーtickと独立）
   useEffect(() => {
@@ -226,7 +226,7 @@ function DemoEngine({ spots, startPos, playing, onPosChange, selectedId }) {
     } else if (posRef.current) {
       map.panTo(posRef.current)
     }
-  }, [selectedId, map])
+  }, [selectedId, map, spots])
 
   return null
 }
@@ -244,7 +244,7 @@ function LiveCamera({ livePos, selected, locateTick }) {
       map.panTo({ lat: selected.lat, lng: selected.lng })
       map.setZoom(15)
     }
-  }, [selected?.id, map])
+  }, [selected, map])
 
   // GPS ボタン押下で現在地へ
   useEffect(() => {
@@ -263,11 +263,15 @@ const introCache = {}
 const isPlaceholder = t => !t || t.startsWith('PLACEHOLDER')
 
 function Card({ spot, currentPos, onClose, userPrefs }) {
-  const staticIntro = spot.generic_intro_en || (!isPlaceholder(spot.intro_short_en) ? spot.intro_short_en : GENERIC_INTRO)
+  const staticIntro = useMemo(
+    () => spot.generic_intro_en || (!isPlaceholder(spot.intro_short_en) ? spot.intro_short_en : GENERIC_INTRO),
+    [spot.generic_intro_en, spot.intro_short_en],
+  )
   const [intro, setIntro]   = useState(introCache[spot.id] || staticIntro)
   const [loading, setLoading] = useState(!introCache[spot.id])
   const [aiOk, setAiOk]     = useState(!!introCache[spot.id])
   const [expanded, setExpanded] = useState(false)
+  const prefsKey = JSON.stringify(userPrefs || {})
 
   const distText = currentPos
     ? formatDistance(haversine(currentPos, { lat: spot.lat, lng: spot.lng }))
@@ -278,10 +282,12 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
     if (!hasPersonalization && introCache[spot.id]) {
       setIntro(introCache[spot.id]); setLoading(false); setAiOk(true); return
     }
+    const controller = new AbortController()
     setIntro(null); setLoading(true); setAiOk(false)
     fetch(`${BACKEND_URL}/generate-intro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         id: spot.id, spot_name_en: spot.spot_name_en,
         anime_title_en: spot.anime_title_en,
@@ -291,9 +297,17 @@ function Card({ spot, currentPos, onClose, userPrefs }) {
     })
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
       .then(data => { if (data.intro) { if (!hasPersonalization) introCache[spot.id] = data.intro; setIntro(data.intro); setAiOk(true) } })
-      .catch(() => { setIntro(staticIntro); setAiOk(false) })
-      .finally(() => setLoading(false))
-  }, [spot.id])
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setIntro(staticIntro)
+          setAiOk(false)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [spot.id, spot.spot_name_en, spot.anime_title_en, spot.scene_description, spot.area, staticIntro, userPrefs, prefsKey])
 
   return (
     <div style={{
@@ -675,7 +689,7 @@ function OnboardingSurvey({ onComplete }) {
         {progress(1)}
         {title("What's your nickname?")}
         <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>
-          We'll use it to personalize your spot descriptions.
+          We&apos;ll use it to personalize your spot descriptions.
         </div>
         <input
           type="text" placeholder="Your nickname…" value={nickname}
@@ -757,7 +771,7 @@ function App() {
     }
     const t = setTimeout(() => setGpsReady(true), 8000)
     return () => clearTimeout(t)
-  }, [gpsStatus, demoMode])
+  }, [gpsReady, gpsStatus, demoMode])
 
   const [userPrefs, setUserPrefs]   = useState(() => loadPrefs())
   const [showSurvey, setShowSurvey] = useState(() => !loadPrefs())
@@ -816,18 +830,6 @@ function App() {
           s.spot_name_en && s.anime_title_en
         )
         setSpots(data)
-        fetch(`${BACKEND_URL}/prefetch-intros`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data.map(s => ({
-            id: s.id, spot_name_en: s.spot_name_en,
-            anime_title_en: s.anime_title_en,
-            scene_description: s.scene_description, area: s.area,
-          }))),
-        })
-          .then(r => r.json())
-          .then(res => { if (res.intros) Object.assign(introCache, res.intros) })
-          .catch(() => {})
       })
   }, [])
 
@@ -1112,7 +1114,7 @@ function App() {
           color: '#fff', fontWeight: 700, fontSize: 13, zIndex: 10, whiteSpace: 'nowrap',
           boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         }}>
-          👆 Tap "📍 Set Start" to begin!
+          👆 Tap &quot;📍 Set Start&quot; to begin!
           {/* 下向き三角（吹き出しの矢印） */}
           <div style={{
             position: 'absolute', bottom: -7, left: 20,

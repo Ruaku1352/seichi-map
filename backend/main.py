@@ -1,42 +1,123 @@
 import os
+import time
+from collections import defaultdict, deque
+from pathlib import Path
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import anthropic
 
 load_dotenv()
 
 app = FastAPI()
 
+DEFAULT_FRONTEND_ORIGIN = "https://seichi-map-rust.vercel.app"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", DEFAULT_FRONTEND_ORIGIN).split(",")
+    if origin.strip()
+]
+MAX_PREFETCH_SPOTS = 10
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMITS = {
+    "generate": 20,
+    "prefetch": 2,
+}
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # サーバーサイドキャッシュ（spot_id -> intro text）
 _intro_cache: dict[str, str] = {}
+_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+
+PREFECTURE_DATA_PATHS = [
+    Path.cwd() / "frontend" / "public" / "seichi_data.json",
+    Path.cwd() / "seichi_data.json",
+    Path.cwd().parent / "seichi_data.json",
+    Path(__file__).resolve().parent.parent / "frontend" / "public" / "seichi_data.json",
+    Path(__file__).resolve().parent.parent / "seichi_data.json",
+    Path(__file__).resolve().parent / "seichi_data.json",
+]
+FAMILIARITY_VALUES = {"", "Newcomer", "Casual fan", "Big fan"}
+MOOD_VALUES = {"", "Emotional", "Exciting", "Heartwarming", "Romance"}
+TRAVEL_STYLE_VALUES = {"", "Taking photos", "Relaxed walking", "Visiting many spots"}
+
+
+def _load_spots() -> dict[str, dict]:
+    for path in PREFECTURE_DATA_PATHS:
+        if path.exists():
+            with path.open(encoding="utf-8") as f:
+                data = json.load(f)
+            return {spot["id"]: spot for spot in data if spot.get("id")}
+    return {}
+
+
+SPOT_DATA = _load_spots()
 
 
 class UserPrefs(BaseModel):
-    nickname: str = ""
-    familiarity: str = ""   # Newcomer / Casual fan / Big fan
-    mood: str = ""          # Emotional / Exciting / Heartwarming / Romance
-    travelStyle: str = ""   # Taking photos / Relaxed walking / Visiting many spots
+    nickname: str = Field(default="", max_length=40)
+    familiarity: str = Field(default="", max_length=20)   # Newcomer / Casual fan / Big fan
+    mood: str = Field(default="", max_length=20)          # Emotional / Exciting / Heartwarming / Romance
+    travelStyle: str = Field(default="", max_length=30)   # Taking photos / Relaxed walking / Visiting many spots
 
 
 class SpotRequest(BaseModel):
-    id: str
-    spot_name_en: str
-    anime_title_en: str
-    scene_description: str
-    area: str
+    id: str = Field(..., max_length=80)
+    spot_name_en: str = Field(default="", max_length=120)
+    anime_title_en: str = Field(default="", max_length=120)
+    scene_description: str = Field(default="", max_length=1000)
+    area: str = Field(default="", max_length=120)
     prefs: UserPrefs = UserPrefs()
+
+
+def _client_key(request: Request, endpoint: str) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.client.host
+    return f"{endpoint}:{ip}"
+
+
+def _enforce_rate_limit(request: Request, endpoint: str) -> None:
+    now = time.monotonic()
+    bucket = _rate_buckets[_client_key(request, endpoint)]
+    while bucket and now - bucket[0] > RATE_LIMIT_WINDOW_SECONDS:
+        bucket.popleft()
+    if len(bucket) >= RATE_LIMITS[endpoint]:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    bucket.append(now)
+
+
+def _validate_prefs(prefs: UserPrefs) -> None:
+    if prefs.familiarity not in FAMILIARITY_VALUES:
+        raise HTTPException(status_code=400, detail="Invalid familiarity")
+    if prefs.mood not in MOOD_VALUES:
+        raise HTTPException(status_code=400, detail="Invalid mood")
+    if prefs.travelStyle not in TRAVEL_STYLE_VALUES:
+        raise HTTPException(status_code=400, detail="Invalid travelStyle")
+
+
+def _trusted_spot(requested: SpotRequest) -> SpotRequest:
+    spot = SPOT_DATA.get(requested.id)
+    if not spot:
+        raise HTTPException(status_code=404, detail="Unknown spot id")
+    _validate_prefs(requested.prefs)
+    return SpotRequest(
+        id=spot["id"],
+        spot_name_en=spot.get("spot_name_en", ""),
+        anime_title_en=spot.get("anime_title_en", ""),
+        scene_description=spot.get("scene_description", ""),
+        area=spot.get("area", ""),
+        prefs=requested.prefs,
+    )
 
 
 def _build_prompt(spot: SpotRequest) -> str:
@@ -98,7 +179,9 @@ def health():
 
 
 @app.post("/generate-intro")
-def generate_intro(spot: SpotRequest):
+def generate_intro(spot: SpotRequest, request: Request):
+    _enforce_rate_limit(request, "generate")
+    spot = _trusted_spot(spot)
     personalized = _has_prefs(spot.prefs)
     if not personalized and spot.id in _intro_cache:
         return {"intro": _intro_cache[spot.id], "cached": True}
@@ -112,9 +195,13 @@ def generate_intro(spot: SpotRequest):
 
 
 @app.post("/prefetch-intros")
-def prefetch_intros(spots: list[SpotRequest]):
+def prefetch_intros(spots: list[SpotRequest], request: Request):
+    _enforce_rate_limit(request, "prefetch")
+    if len(spots) > MAX_PREFETCH_SPOTS:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_PREFETCH_SPOTS} spots per prefetch")
     results = {}
-    for spot in spots:
+    for requested in spots:
+        spot = _trusted_spot(requested)
         if spot.id not in _intro_cache:
             try:
                 _intro_cache[spot.id] = _generate(spot)
