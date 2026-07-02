@@ -738,7 +738,7 @@ function App() {
   const [selected, setSelected]         = useState(null)
   const [selectedTourist, setSelectedTourist] = useState(null)
 
-  const [demoMode, setDemoMode]         = useState(true)
+  const [demoMode, setDemoMode]         = useState(false)
   const [playing, setPlaying]           = useState(false)
   const [startPos, setStartPos]         = useState(null)   // デモ中心点
   const [startPosMode, setStartPosMode] = useState(false)  // 位置指定待ち
@@ -747,6 +747,16 @@ function App() {
   const triggeredRef = useRef(new Set())
   const [locateTick, setLocateTick] = useState(0)
   const { pos: livePos, status: gpsStatus } = useLiveGPS(!demoMode)
+
+  const [gpsReady, setGpsReady] = useState(false)
+  useEffect(() => {
+    if (gpsReady) return
+    if (demoMode || gpsStatus === 'ok' || gpsStatus === 'error') {
+      setGpsReady(true); return
+    }
+    const t = setTimeout(() => setGpsReady(true), 8000)
+    return () => clearTimeout(t)
+  }, [gpsStatus, demoMode])
 
   const [userPrefs, setUserPrefs]   = useState(() => loadPrefs())
   const [showSurvey, setShowSurvey] = useState(() => !loadPrefs())
@@ -1134,6 +1144,22 @@ function App() {
       {selected && (
         <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} userPrefs={userPrefs} />
       )}
+      {/* GPSローディングオーバーレイ */}
+      {!gpsReady && (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#fff',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9998,
+        }}>
+          <div style={{
+            width: 50, height: 50, borderRadius: '50%',
+            border: '5px solid #f3f3f3', borderTop: `5px solid ${THEME}`,
+            animation: 'spin 1s linear infinite', marginBottom: 16,
+          }} />
+          <div style={{ fontSize: 14, color: '#888', fontWeight: 500 }}>Getting your location…</div>
+        </div>
+      )}
+
       {showSurvey && (
         <OnboardingSurvey onComplete={prefs => { setUserPrefs(prefs); setShowSurvey(false) }} />
       )}
