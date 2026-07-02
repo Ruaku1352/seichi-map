@@ -413,7 +413,7 @@ function Card({ spot, currentPos, onClose, userPrefs, isFavorite, onToggleFavori
                 </div>
               ) : intro}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
                 target="_blank"
@@ -426,7 +426,25 @@ function Card({ spot, currentPos, onClose, userPrefs, isFavorite, onToggleFavori
                   fontSize: 12, fontWeight: 700, textDecoration: 'none',
                 }}
               >🗺️ Get directions</a>
-              <div style={{ fontSize: 11, color: '#bbb' }}>
+              {spot.official_url && (
+                <a
+                  href={spot.official_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '6px 14px', borderRadius: 20,
+                    background: '#f3f4f6', color: '#374151',
+                    fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                  }}
+                >
+                  {spot.official_url.includes('youtube.com') || spot.official_url.includes('youtu.be')
+                    ? '▶ Watch trailer'
+                    : '🌐 Official site'}
+                </a>
+              )}
+              <div style={{ fontSize: 11, color: '#bbb', marginLeft: 'auto' }}>
                 {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
               </div>
             </div>
