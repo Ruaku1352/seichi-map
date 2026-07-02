@@ -52,7 +52,7 @@ def _build_prompt(spot: SpotRequest) -> str:
     )
     instructions = []
     if p.nickname:
-        instructions.append(f"Address the reader as '{p.nickname}' naturally once at the start (e.g. 'Hey {p.nickname},').")
+        instructions.append(f"You MUST start the text by addressing the reader as '{p.nickname}' (e.g. 'Hey {p.nickname},' or 'For you, {p.nickname},') — this is required every time.")
     if p.familiarity == "Newcomer":
         instructions.append("The reader is new to anime — explain simply without assuming prior knowledge.")
     elif p.familiarity == "Casual fan":

@@ -1061,7 +1061,7 @@ function App() {
             color: demoMode ? '#fff' : '#555',
           }}
         >
-          {demoMode ? 'DEMO' : 'LIVE'}
+          {demoMode ? 'LIVE' : 'DEMO'}
         </button>
 
         {demoMode && (<>
