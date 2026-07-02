@@ -2,6 +2,12 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { APIProvider, Map, Marker, useMap } from '@vis.gl/react-google-maps'
 import { MarkerClusterer } from '@googlemaps/markerclusterer'
 
+// ============================================================
+// 汎用紹介文（AI生成失敗時・intro_short_en 未記入時のフォールバック）
+// ここを編集してください ↓
+const GENERIC_INTRO = `Welcome to this anime pilgrimage spot! This location appeared in a beloved anime series and draws fans from around the world. Come and experience the scenery that inspired the story.`
+// ============================================================
+
 const TOKYO = { lat: 35.6762, lng: 139.6503 }
 const TOKYO_STATION = { lat: 35.6812, lng: 139.7671 }
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
@@ -254,8 +260,11 @@ function LiveCamera({ livePos, selected, locateTick }) {
 const introCache = {}
 
 // ── スポットカード（距離表示付き）────────────────────────────────────────
+const isPlaceholder = t => !t || t.startsWith('PLACEHOLDER')
+
 function Card({ spot, currentPos, onClose }) {
-  const [intro, setIntro]   = useState(introCache[spot.id] || spot.intro_short_en)
+  const staticIntro = isPlaceholder(spot.intro_short_en) ? GENERIC_INTRO : spot.intro_short_en
+  const [intro, setIntro]   = useState(introCache[spot.id] || staticIntro)
   const [loading, setLoading] = useState(!introCache[spot.id])
   const [aiOk, setAiOk]     = useState(!!introCache[spot.id])
   const [expanded, setExpanded] = useState(false)
@@ -268,7 +277,7 @@ function Card({ spot, currentPos, onClose }) {
     if (introCache[spot.id]) {
       setIntro(introCache[spot.id]); setLoading(false); setAiOk(true); return
     }
-    setIntro(spot.intro_short_en); setLoading(true); setAiOk(false)
+    setIntro(staticIntro); setLoading(true); setAiOk(false)
     fetch(`${BACKEND_URL}/generate-intro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -280,7 +289,7 @@ function Card({ spot, currentPos, onClose }) {
     })
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
       .then(data => { if (data.intro) { introCache[spot.id] = data.intro; setIntro(data.intro); setAiOk(true) } })
-      .catch(() => { setIntro(spot.intro_short_en); setAiOk(false) })
+      .catch(() => { setIntro(staticIntro); setAiOk(false) })
       .finally(() => setLoading(false))
   }, [spot.id])
 
