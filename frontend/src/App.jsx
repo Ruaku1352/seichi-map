@@ -66,11 +66,11 @@ const SPOT_ICON = {
 
 const FAVORITE_SPOT_ICON = {
   path: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
-  fillColor: '#ec4899',
+  fillColor: '#ff0099',
   fillOpacity: 1,
   strokeColor: '#fff',
-  strokeWeight: 1.5,
-  scale: 1.0,
+  strokeWeight: 2,
+  scale: 1.3,
   anchor: { x: 12, y: 12 },
 }
 
@@ -123,10 +123,9 @@ function ClusteredSpotMarkers({ spots, selectedId, onSelect, highlightAnime, fav
     if (!clustererRef.current) return
     clustererRef.current.clearMarkers()
     const markers = spots
-      .filter(s => s.id !== selectedId && !(highlightAnime && s.anime_title_en === highlightAnime))
+      .filter(s => s.id !== selectedId && !(highlightAnime && s.anime_title_en === highlightAnime) && !favorites?.has(s.id))
       .map(spot => {
-        const isFav = favorites?.has(spot.id)
-        const icon = highlightAnime ? DIM_SPOT_ICON : isFav ? FAVORITE_SPOT_ICON : SPOT_ICON
+        const icon = highlightAnime ? DIM_SPOT_ICON : SPOT_ICON
         const m = new google.maps.Marker({
           position: { lat: spot.lat, lng: spot.lng },
           title: spot.spot_name_en,
@@ -337,7 +336,7 @@ function Card({ spot, currentPos, onClose, userPrefs, isFavorite, onToggleFavori
         onClick={() => setExpanded(e => !e)}
         style={{
           background: `linear-gradient(135deg, ${THEME} 0%, ${THEME_DARK} 100%)`,
-          padding: '14px 80px 14px 18px', cursor: 'pointer',
+          padding: '14px 88px 14px 18px', cursor: 'pointer',
         }}
       >
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 600,
@@ -367,53 +366,69 @@ function Card({ spot, currentPos, onClose, userPrefs, isFavorite, onToggleFavori
         </div>
       </div>
 
-      <button
-        onClick={e => { e.stopPropagation(); onToggleFavorite(spot.id) }}
-        style={{
-          position: 'absolute', top: 10, right: 44,
-          background: 'rgba(255,255,255,0.2)', border: 'none',
-          fontSize: 15, width: 28, height: 28,
-          borderRadius: '50%', cursor: 'pointer', lineHeight: 1,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >{isFavorite ? '❤️' : '🤍'}</button>
-      <button onClick={onClose} style={{
+      {/* ❤️ と ✕ を flex で横並び（重なり防止） */}
+      <div style={{
         position: 'absolute', top: 10, right: 12,
-        background: 'rgba(255,255,255,0.2)', border: 'none',
-        color: '#fff', fontSize: 16, width: 28, height: 28,
-        borderRadius: '50%', cursor: 'pointer', lineHeight: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>✕</button>
+        display: 'flex', gap: 6, alignItems: 'center',
+      }}>
+        <button
+          onClick={e => { e.stopPropagation(); onToggleFavorite(spot.id) }}
+          style={{
+            background: 'rgba(255,255,255,0.2)', border: 'none',
+            fontSize: 15, width: 28, height: 28,
+            borderRadius: '50%', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >{isFavorite ? '❤️' : '🤍'}</button>
+        <button onClick={onClose} style={{
+          background: 'rgba(255,255,255,0.2)', border: 'none',
+          color: '#fff', fontSize: 16, width: 28, height: 28,
+          borderRadius: '50%', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>✕</button>
+      </div>
 
       {expanded && (
-        <div style={{ padding: '14px 18px 12px' }}>
-          <div style={{ fontSize: 14, color: '#333', lineHeight: 1.7 }}>
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#aaa', paddingTop: 4 }}>
-                <div style={{
-                  width: 15, height: 15, border: '2px solid #e0e0e0',
-                  borderTop: '2px solid #7c3aed', borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite', flexShrink: 0,
-                }} />
-                <span style={{ fontSize: 13 }}>Generating introduction…</span>
-              </div>
-            ) : intro}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-            <a
-              href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
+        <div style={{ padding: '0 0 12px' }}>
+          {/* 写真エリア（photo_url が設定されていれば表示） */}
+          {spot.photo_url && (
+            <img
+              src={spot.photo_url}
+              alt={spot.spot_name_en}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '6px 14px', borderRadius: 20,
-                background: THEME, color: '#fff',
-                fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block',
               }}
-            >🗺️ Get directions</a>
-            <div style={{ fontSize: 11, color: '#bbb' }}>
-              {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+            />
+          )}
+          <div style={{ padding: '12px 18px 0' }}>
+            <div style={{ fontSize: 14, color: '#333', lineHeight: 1.7 }}>
+              {loading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#aaa', paddingTop: 4 }}>
+                  <div style={{
+                    width: 15, height: 15, border: '2px solid #e0e0e0',
+                    borderTop: '2px solid #7c3aed', borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite', flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: 13 }}>Generating introduction…</span>
+                </div>
+              ) : intro}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 14px', borderRadius: 20,
+                  background: THEME, color: '#fff',
+                  fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                }}
+              >🗺️ Get directions</a>
+              <div style={{ fontSize: 11, color: '#bbb' }}>
+                {!loading && (aiOk ? '✨ AI generated' : '📄 description')}
+              </div>
             </div>
           </div>
         </div>
@@ -1032,6 +1047,21 @@ function App() {
             highlightAnime={searchAnime}
             favorites={favorites}
           />
+
+          {/* お気に入りピン（クラスタリングなし・ピンク星） */}
+          {spots
+            .filter(s => favorites.has(s.id) && s.id !== selected?.id && !(searchAnime && s.anime_title_en === searchAnime))
+            .map(s => (
+              <Marker
+                key={`fav-${s.id}`}
+                position={{ lat: s.lat, lng: s.lng }}
+                title={s.spot_name_en}
+                icon={FAVORITE_SPOT_ICON}
+                zIndex={60}
+                onClick={() => handleSpotSelect(s)}
+              />
+            ))
+          }
 
           {/* 検索ヒットピン（クラスタリングなし・赤ピン） */}
           {searchAnime && spots
