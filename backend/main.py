@@ -23,16 +23,25 @@ client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 _intro_cache: dict[str, str] = {}
 
 
+class UserPrefs(BaseModel):
+    nickname: str = ""
+    familiarity: str = ""   # Newcomer / Casual fan / Big fan
+    mood: str = ""          # Emotional / Exciting / Heartwarming / Romance
+    travelStyle: str = ""   # Taking photos / Relaxed walking / Visiting many spots
+
+
 class SpotRequest(BaseModel):
     id: str
     spot_name_en: str
     anime_title_en: str
     scene_description: str
     area: str
+    prefs: UserPrefs = UserPrefs()
 
 
 def _build_prompt(spot: SpotRequest) -> str:
-    return (
+    p = spot.prefs
+    prompt = (
         f"You are a friendly travel guide for anime fans visiting Japan. "
         f"Write exactly 2-3 short sentences in English introducing this anime pilgrimage spot to foreign tourists. "
         f"Be enthusiastic but concise. No headings, no bullet points, plain text only.\n\n"
@@ -41,6 +50,37 @@ def _build_prompt(spot: SpotRequest) -> str:
         f"Scene: {spot.scene_description}\n"
         f"Area: {spot.area}"
     )
+    instructions = []
+    if p.nickname:
+        instructions.append(f"Address the reader as '{p.nickname}' naturally once at the start (e.g. 'Hey {p.nickname},').")
+    if p.familiarity == "Newcomer":
+        instructions.append("The reader is new to anime — explain simply without assuming prior knowledge.")
+    elif p.familiarity == "Casual fan":
+        instructions.append("The reader is a casual fan — be friendly and reference the show naturally.")
+    elif p.familiarity == "Big fan":
+        instructions.append("The reader is a big fan — go deeper, mention specific scenes or characters if relevant.")
+    if p.mood == "Emotional":
+        instructions.append("Emphasize the emotional and touching moments connected to this spot.")
+    elif p.mood == "Exciting":
+        instructions.append("Emphasize the exciting and dynamic aspects.")
+    elif p.mood == "Heartwarming":
+        instructions.append("Emphasize the warm, cozy, and uplifting atmosphere.")
+    elif p.mood == "Romance":
+        instructions.append("Emphasize the romantic or scenic beauty of the spot.")
+    if p.travelStyle == "Taking photos":
+        instructions.append("Suggest what makes this spot great for memorable photos.")
+    elif p.travelStyle == "Relaxed walking":
+        instructions.append("Suggest how to enjoy this spot at a leisurely pace.")
+    elif p.travelStyle == "Visiting many spots":
+        instructions.append("Keep it brief and highlight what is uniquely worth stopping for.")
+    if instructions:
+        prompt += "\n\nPersonalization:\n" + "\n".join(f"- {i}" for i in instructions)
+        prompt += "\n\nIMPORTANT: Keep all proper nouns (anime titles, character names, place names) in their original form."
+    return prompt
+
+
+def _has_prefs(p: UserPrefs) -> bool:
+    return bool(p.nickname or p.familiarity or p.mood or p.travelStyle)
 
 
 def _generate(spot: SpotRequest) -> str:
@@ -59,11 +99,13 @@ def health():
 
 @app.post("/generate-intro")
 def generate_intro(spot: SpotRequest):
-    if spot.id in _intro_cache:
+    personalized = _has_prefs(spot.prefs)
+    if not personalized and spot.id in _intro_cache:
         return {"intro": _intro_cache[spot.id], "cached": True}
     try:
         text = _generate(spot)
-        _intro_cache[spot.id] = text
+        if not personalized:
+            _intro_cache[spot.id] = text
         return {"intro": text, "cached": False}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

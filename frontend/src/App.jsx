@@ -262,7 +262,7 @@ const introCache = {}
 // ── スポットカード（距離表示付き）────────────────────────────────────────
 const isPlaceholder = t => !t || t.startsWith('PLACEHOLDER')
 
-function Card({ spot, currentPos, onClose }) {
+function Card({ spot, currentPos, onClose, userPrefs }) {
   const staticIntro = spot.generic_intro_en || (!isPlaceholder(spot.intro_short_en) ? spot.intro_short_en : GENERIC_INTRO)
   const [intro, setIntro]   = useState(introCache[spot.id] || staticIntro)
   const [loading, setLoading] = useState(!introCache[spot.id])
@@ -285,6 +285,7 @@ function Card({ spot, currentPos, onClose }) {
         id: spot.id, spot_name_en: spot.spot_name_en,
         anime_title_en: spot.anime_title_en,
         scene_description: spot.scene_description, area: spot.area,
+        prefs: userPrefs || {},
       }),
     })
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
@@ -449,6 +450,153 @@ function GpsLocateButton({ status, onLocate }) {
   )
 }
 
+// ── アンケート（localStorage） ────────────────────────────────────────────
+const SURVEY_KEY = 'seichi_prefs'
+const loadPrefs  = () => { try { const r = localStorage.getItem(SURVEY_KEY); return r ? JSON.parse(r) : null } catch { return null } }
+const savePrefs  = p  => localStorage.setItem(SURVEY_KEY, JSON.stringify(p))
+
+function OnboardingSurvey({ onComplete }) {
+  const [step, setStep]           = useState(0)
+  const [nickname, setNickname]   = useState('')
+  const [familiarity, setFamiliarity] = useState('')
+  const [mood, setMood]           = useState('')
+
+  const finish = travelStyle => {
+    const prefs = { nickname: nickname.trim(), familiarity, mood, travelStyle }
+    savePrefs(prefs)
+    onComplete(prefs)
+  }
+
+  const overlay = {
+    position: 'fixed', inset: 0, zIndex: 5000,
+    background: 'rgba(0,0,0,0.82)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 24,
+  }
+  const card = {
+    background: '#fff', borderRadius: 20, padding: '28px 24px',
+    maxWidth: 340, width: '100%',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+  }
+  const progress = n => (
+    <div style={{ fontSize: 11, color: '#bbb', fontWeight: 700, marginBottom: 10 }}>{n} / 4</div>
+  )
+  const title = t => (
+    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a1a', lineHeight: 1.45, marginBottom: 18 }}>{t}</div>
+  )
+  const optBtn = (onClick, emoji, label, desc) => (
+    <button key={label} onClick={onClick} style={{
+      width: '100%', padding: '12px 14px', borderRadius: 12,
+      border: '2px solid #e5e7eb', background: '#fff',
+      cursor: 'pointer', marginBottom: 10,
+      display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+    }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = THEME}
+      onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
+    >
+      <span style={{ fontSize: 22, flexShrink: 0 }}>{emoji}</span>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{label}</div>
+        <div style={{ fontSize: 11, color: '#999' }}>{desc}</div>
+      </div>
+    </button>
+  )
+  const nextBtn = (label, onClick, disabled) => (
+    <button onClick={onClick} disabled={disabled} style={{
+      width: '100%', padding: '11px', borderRadius: 12,
+      background: disabled ? '#e5e7eb' : THEME,
+      color: disabled ? '#aaa' : '#fff',
+      border: 'none', fontSize: 14, fontWeight: 700,
+      cursor: disabled ? 'default' : 'pointer', marginBottom: 8,
+    }}>{label}</button>
+  )
+  const skipBtn = onClick => (
+    <button onClick={onClick} style={{
+      width: '100%', padding: '9px', borderRadius: 12,
+      background: 'none', border: '2px solid #e5e7eb',
+      color: '#999', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    }}>Skip</button>
+  )
+
+  if (step === 0) return (
+    <div style={overlay}>
+      <div style={card}>
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{ fontSize: 38, marginBottom: 10 }}>🗾</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: '#1a1a1a', marginBottom: 10 }}>Welcome to Seichi Map!</div>
+          <div style={{ fontSize: 13, color: '#666', lineHeight: 1.7 }}>
+            We would love to personalize your<br />experience. Could you spare a moment<br />to answer a few quick questions?
+          </div>
+        </div>
+        {nextBtn("Sure, let's go! 🎌", () => setStep(1), false)}
+        {skipBtn(() => finish(''))}
+      </div>
+    </div>
+  )
+
+  if (step === 1) return (
+    <div style={overlay}>
+      <div style={card}>
+        {progress(1)}
+        {title("What's your nickname?")}
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>
+          We'll use it to personalize your spot descriptions.
+        </div>
+        <input
+          type="text" placeholder="Your nickname…" value={nickname}
+          onChange={e => setNickname(e.target.value)}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            border: '2px solid #e5e7eb', borderRadius: 10,
+            padding: '10px 12px', fontSize: 16, outline: 'none', marginBottom: 12,
+          }}
+          onFocus={e => e.target.style.borderColor = THEME}
+          onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+        />
+        {nextBtn('Next →', () => setStep(2), !nickname.trim())}
+        {skipBtn(() => { setNickname(''); setStep(2) })}
+      </div>
+    </div>
+  )
+
+  if (step === 2) return (
+    <div style={overlay}>
+      <div style={card}>
+        {progress(2)}
+        {title('How familiar are you with anime?')}
+        {optBtn(() => { setFamiliarity('Newcomer');   setStep(3) }, '🌱', 'Newcomer',    'Just getting started')}
+        {optBtn(() => { setFamiliarity('Casual fan'); setStep(3) }, '😊', 'Casual fan',  'I watch some anime')}
+        {optBtn(() => { setFamiliarity('Big fan');    setStep(3) }, '⭐', 'Big fan',     'I know my stuff!')}
+      </div>
+    </div>
+  )
+
+  if (step === 3) return (
+    <div style={overlay}>
+      <div style={card}>
+        {progress(3)}
+        {title('What kind of stories do you love?')}
+        {optBtn(() => { setMood('Emotional');    setStep(4) }, '😢', 'Emotional',    'Stories that move me')}
+        {optBtn(() => { setMood('Exciting');     setStep(4) }, '⚡', 'Exciting',     'Action & adventure')}
+        {optBtn(() => { setMood('Heartwarming'); setStep(4) }, '🌸', 'Heartwarming', 'Cozy & uplifting')}
+        {optBtn(() => { setMood('Romance');      setStep(4) }, '💕', 'Romance',      'Love & beauty')}
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={overlay}>
+      <div style={card}>
+        {progress(4)}
+        {title("What's your travel style?")}
+        {optBtn(() => finish('Taking photos'),      '📸', 'Taking photos',      'I live for the perfect shot')}
+        {optBtn(() => finish('Relaxed walking'),    '🚶', 'Relaxed walking',    'Slow and scenic')}
+        {optBtn(() => finish('Visiting many spots'),'🗺️', 'Visiting many spots','Covering as much as possible')}
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────
 function App() {
   const [spots, setSpots]               = useState([])
@@ -465,6 +613,9 @@ function App() {
   const triggeredRef = useRef(new Set())
   const [locateTick, setLocateTick] = useState(0)
   const { pos: livePos, status: gpsStatus } = useLiveGPS(!demoMode)
+
+  const [userPrefs, setUserPrefs] = useState(() => loadPrefs())
+  const [showSurvey, setShowSurvey] = useState(() => !loadPrefs())
 
   const [searchQuery, setSearchQuery]         = useState('')
   const [searchAnime, setSearchAnime]         = useState(null)
@@ -822,7 +973,10 @@ function App() {
         />
       )}
       {selected && (
-        <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} />
+        <Card spot={selected} currentPos={activePos} onClose={() => setSelected(null)} userPrefs={userPrefs} />
+      )}
+      {showSurvey && (
+        <OnboardingSurvey onComplete={prefs => { setUserPrefs(prefs); setShowSurvey(false) }} />
       )}
       {!selected && selectedTourist && (
         <TouristPopup spot={selectedTourist} onClose={() => setSelectedTourist(null)} />
